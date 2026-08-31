@@ -914,7 +914,7 @@ export function PitchArena() {
                   </div>
                 </div>
                 {pitch.status === 'lobby' ? (
-                  <div className="space-y-4 p-5">
+                  <div className="space-y-3 p-3.5">
                     <div>
                       <p className="text-sm text-white/45">Ready when you are.</p>
                       <p className="mt-1 max-w-2xl text-lg text-white/85">
@@ -1040,7 +1040,7 @@ export function PitchArena() {
                           submitDraft();
                       }}
                       placeholder="Continue your pitch… metrics, customers, moat, the ask."
-                      className="min-h-24 resize-none border-0 bg-transparent text-base text-white placeholder:text-white/30 focus-visible:ring-0"
+                        className="min-h-14 resize-none border-0 bg-transparent text-sm text-white placeholder:text-white/30 focus-visible:ring-0"
                     />
                     <div className="flex items-center justify-between gap-3 border-t border-white/8 px-2 pt-3">
                       <div className="flex items-center gap-2">
