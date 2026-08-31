@@ -6,6 +6,9 @@ import type {
   LeaderboardEntry,
   PanelMood,
   PitchDetailsUpdate,
+  EvidenceReview,
+  FounderTurnState,
+  PitchFeedEntry,
   PitchMaterial,
 } from '@/app/pitch-arena';
 import type { Soundtrack } from '@/lib/soundtrack';
@@ -40,6 +43,13 @@ type PitchSnapshot = {
   }>;
   bids: Bid[];
   materials: PitchMaterial[];
+  conversation: PitchFeedEntry[];
+  founderTurn: FounderTurnState;
+  evidenceReview: {
+    pendingMaterialIds: string[];
+    reviews: EvidenceReview[];
+    ready: boolean;
+  };
   panelDirectives: {
     rivalry: string;
     curveball: string;
@@ -95,6 +105,11 @@ export function registerPitchTools(options: {
   startPitch: (next?: Partial<PitchSnapshot['pitch']>) => void;
   updatePitchDetails: (update: PitchDetailsUpdate) => void;
   applyJudgeRound: (roundSummary: string, reactions: JudgeReaction[]) => void;
+  applyJudgeTurn: (roundSummary: string, reaction: JudgeReaction) => void;
+  reviewPitchEvidence: (reviews: EvidenceReview[]) => void;
+  waitForFounderResponse: (
+    timeoutSeconds?: number,
+  ) => Promise<Record<string, unknown>>;
   applyBidRound: (bids: Bid[]) => void;
   finalizePitch: (result: {
     score: number;
@@ -117,6 +132,21 @@ export function registerPitchTools(options: {
   const add = async (tool: RegisterToolArgs) => {
     await document.modelContext?.registerTool(tool);
     registered.push(tool.name);
+  };
+  const requireEvidenceReview = () => {
+    const pending = options.getSnapshot().evidenceReview.pendingMaterialIds;
+    if (pending.length) {
+      throw new Error(
+        `Review every uploaded pitch file before bringing in the judges. Pending material ids: ${pending.join(', ')}`,
+      );
+    }
+  };
+  const requireFounderTurnComplete = () => {
+    if (options.getSnapshot().founderTurn.status === 'awaiting') {
+      throw new Error(
+        'The founder has not answered the current judge. Call wait_for_founder_response before posting another turn.',
+      );
+    }
   };
   const tools: RegisterToolArgs[] = [
     {
@@ -217,7 +247,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read the live pitch transcript, timer, ask, uploaded evidence links, prior offers, and all four judges. Inspect relevant pitch images or documents before judging. Role-play all four distinct judges: get impatient with vague repetition, move a judge to out when patience is exhausted, and reward specific evidence with rising interest.',
+        'Read the live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, call wait_for_founder_response, evaluate the exact answer, then continue. Never invent a founder answer.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -227,9 +257,106 @@ export function registerPitchTools(options: {
       execute: () => options.getSnapshot(),
     },
     {
+      name: 'review_pitch_evidence',
+      description:
+        'Confirm that every currently pending uploaded pitch file has actually been opened and reviewed. Supply a concise grounded summary for each pending material id. Judge tools remain blocked until this gate is complete; uploading a new file creates a new pending review.',
+      inputSchema: {
+        type: 'object',
+        required: ['reviews'],
+        properties: {
+          reviews: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 20,
+            items: {
+              type: 'object',
+              required: ['materialId', 'summary'],
+              properties: {
+                materialId: { type: 'string', minLength: 1, maxLength: 120 },
+                summary: { type: 'string', minLength: 10, maxLength: 700 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) => {
+        const pending = options.getSnapshot().evidenceReview.pendingMaterialIds;
+        const incoming = args.reviews as Array<{
+          materialId: string;
+          summary: string;
+        }>;
+        const supplied = new Set(incoming.map((review) => review.materialId));
+        const missing = pending.filter((id) => !supplied.has(id));
+        const invalid = incoming.filter(
+          (review) => !pending.includes(review.materialId),
+        );
+        if (missing.length || invalid.length) {
+          throw new Error(
+            `Evidence review must match all pending materials exactly. Missing: ${missing.join(', ') || 'none'}. Invalid: ${invalid.map((item) => item.materialId).join(', ') || 'none'}.`,
+          );
+        }
+        const reviews: EvidenceReview[] = incoming.map((review) => ({
+          ...review,
+          reviewedAt: Date.now(),
+        }));
+        options.reviewPitchEvidence(reviews);
+        return { reviewed: true, reviews };
+      },
+    },
+    {
+      name: 'post_judge_turn',
+      description:
+        'Post exactly one visible and spoken judge turn. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response and use its returned answer or timeout before any other judge acts. Reward specific evidence and genuine answers; lower interest for evasive replies. A timeout should make the next turn sharper and more ruthless, not fabricate an answer.',
+      inputSchema: {
+        type: 'object',
+        required: ['roundSummary', 'judge'],
+        properties: {
+          roundSummary: { type: 'string', minLength: 1, maxLength: 500 },
+          judge: reactionSchema,
+        },
+        additionalProperties: false,
+      },
+      execute: (args) => {
+        requireEvidenceReview();
+        requireFounderTurnComplete();
+        const judge = args.judge as JudgeReaction;
+        options.applyJudgeTurn(String(args.roundSummary), judge);
+        return {
+          posted: true,
+          judge,
+          next: judge.question
+            ? 'Call wait_for_founder_response now.'
+            : 'The founder may continue, or another judge may speak.',
+        };
+      },
+    },
+    {
+      name: 'wait_for_founder_response',
+      description:
+        'Wait inside the current WebMCP turn for the human founder to answer the active judge by voice or text. The page returns the exact founder response, or a timed_out result after at most 45 seconds. Do not post another judge turn while this tool is waiting. After an answer, evaluate its specificity and evidence before changing the room.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          timeoutSeconds: {
+            type: 'number',
+            minimum: 1,
+            maximum: 45,
+            default: 45,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) =>
+        options.waitForFounderResponse(
+          typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 45,
+        ),
+    },
+    {
       name: 'post_judge_round',
       description:
-        'Post one visible and spoken reaction from each AI judge. In a voice chat, do not read or imitate these reactions yourself: the arena speaks each judge with a distinct voice. Write currency and percentages as natural spoken words. Set each judge’s mood independently so their portrait changes between skeptical, intrigued, and impressed; the browser animates their glow and voice waveform while they speak. Make personalities disagree. Vague, evasive, repetitive, or time-wasting answers should lower interest, become pressing, and eventually say exactly “I’m out.” Strong new evidence may raise interest or earn one surprising reversal. Occasionally introduce a plausible curveball, but never make outcomes arbitrary.',
+        'Legacy opening montage only: post one brief non-question reaction from each judge before interactive questioning begins. Do not use this tool for Q&A. Every reaction must omit question; use post_judge_turn plus wait_for_founder_response for the actual pitch.',
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judges'],
@@ -245,9 +372,16 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: (args) => {
+        requireEvidenceReview();
+        requireFounderTurnComplete();
         const judges = args.judges as JudgeReaction[];
         if (new Set(judges.map((judge) => judge.judgeId)).size !== 4) {
           throw new Error('Provide exactly one reaction for each judge.');
+        }
+        if (judges.some((judge) => judge.question)) {
+          throw new Error(
+            'Questions require post_judge_turn followed by wait_for_founder_response.',
+          );
         }
         options.applyJudgeRound(String(args.roundSummary), judges);
         return {
@@ -286,6 +420,8 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: (args) => {
+        requireEvidenceReview();
+        requireFounderTurnComplete();
         const bids = args.bids as Bid[];
         if (new Set(bids.map((bid) => bid.judgeId)).size !== bids.length) {
           throw new Error(
@@ -312,6 +448,8 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: async (args) => {
+        requireEvidenceReview();
+        requireFounderTurnComplete();
         const result = await options.finalizePitch({
           score: Number(args.score),
           summary: String(args.summary),

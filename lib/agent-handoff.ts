@@ -44,13 +44,17 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
     'Join the four-judge panel on the open Pitch The AI page.',
     `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, and equity ${request.equity}.`,
     `Opening pitch: ${pitchText}`,
-    'Then role-play all four judges. Keep each personality distinct, update the visible arena after each founder answer, burn patience when the pitch falters, take judges out when warranted, and let interested judges compete with live bids when the evidence is strong.',
+    'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
+    'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response and remain inside that WebMCP call for up to 45 seconds. Evaluate the exact returned answer before the next judge speaks. Never invent or skip the founder response.',
+    'Keep each personality distinct. Specific, honest answers and evidence can improve the room; evasion, repetition, or silence should burn patience and become increasingly ruthless. Take judges out when warranted, and let strongly interested judges compete with live bids.',
   ].join('\n\n');
 }
 
 export function hasBringMyAiAgentBridge() {
-  return typeof window !== 'undefined' &&
-    typeof window.bringMyAI?.requestAgentTurn === 'function';
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.bringMyAI?.requestAgentTurn === 'function'
+  );
 }
 
 export async function requestPitchAgent(

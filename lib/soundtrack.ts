@@ -24,11 +24,15 @@ function oscillator(
   return { source, gain };
 }
 
-export function startSoundtrack(context: AudioContext, track: Soundtrack) {
+export function startSoundtrack(
+  context: AudioContext,
+  track: Soundtrack,
+  volume = 0.42,
+) {
   if (track === 'cinematic') {
     const audio = new Audio('/audio/elevenlabs-cinematic.mp3');
     audio.loop = true;
-    audio.volume = 0.16;
+    audio.volume = Math.min(0.65, Math.max(0, volume));
     void audio.play().catch(() => undefined);
     return () => {
       audio.pause();
@@ -37,7 +41,7 @@ export function startSoundtrack(context: AudioContext, track: Soundtrack) {
   }
 
   const master = context.createGain();
-  master.gain.value = 0.14;
+  master.gain.value = Math.min(0.7, Math.max(0, volume));
   master.connect(context.destination);
   const sources: OscillatorNode[] = [];
   const intervals: number[] = [];

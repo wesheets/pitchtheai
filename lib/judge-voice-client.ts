@@ -5,13 +5,44 @@ type JudgeVoice = {
   name: string;
   pitch: number;
   rate: number;
+  preferred: string[];
+  lang: string;
 };
 
 const BROWSER_VOICES: Record<VoiceJudgeId, JudgeVoice> = {
-  maya: { name: 'Maya Cross', pitch: 1.12, rate: 1.04 },
-  julian: { name: 'Julian Voss', pitch: 0.88, rate: 0.96 },
-  priya: { name: 'Priya Nair', pitch: 1, rate: 1.08 },
-  theo: { name: 'Theo Grant', pitch: 0.76, rate: 0.92 },
+  maya: {
+    name: 'Maya Cross',
+    pitch: 1.04,
+    rate: 1.02,
+    preferred: ['Aria', 'Samantha', 'Zira', 'Jenny'],
+    lang: 'en-US',
+  },
+  julian: {
+    name: 'Julian Voss',
+    pitch: 0.9,
+    rate: 0.96,
+    preferred: ['Ryan', 'Daniel', 'George'],
+    lang: 'en-GB',
+  },
+  priya: {
+    name: 'Priya Nair',
+    pitch: 1,
+    rate: 1.04,
+    preferred: ['Neerja', 'Heera', 'Veena'],
+    lang: 'en-IN',
+  },
+  theo: {
+    name: 'Theo Grant',
+    pitch: 0.8,
+    rate: 0.92,
+    preferred: ['Guy', 'David', 'Christopher'],
+    lang: 'en-US',
+  },
+};
+
+export type VoiceHooks = {
+  onStart?: () => void;
+  onProgress?: (visibleText: string) => void;
 };
 
 function abortError() {
@@ -32,13 +63,28 @@ function speakWithBrowser(
   judgeId: VoiceJudgeId,
   text: string,
   signal: AbortSignal,
+  hooks: VoiceHooks,
 ) {
   return new Promise<void>((resolve, reject) => {
     if (!window.speechSynthesis) return reject(new Error('Speech unavailable'));
     const voice = BROWSER_VOICES[judgeId];
-    const utterance = new SpeechSynthesisUtterance(`${voice.name}. ${text}`);
+    const spokenText = `${voice.name}. ${text}`;
+    const utterance = new SpeechSynthesisUtterance(spokenText);
     utterance.pitch = voice.pitch;
     utterance.rate = voice.rate;
+    utterance.lang = voice.lang;
+    const voices = window.speechSynthesis.getVoices();
+    utterance.voice =
+      voices.find((candidate) =>
+        voice.preferred.some((name) => candidate.name.includes(name)),
+      ) ??
+      voices.find((candidate) => candidate.lang === voice.lang) ??
+      null;
+    utterance.onstart = () => hooks.onStart?.();
+    utterance.onboundary = (event) => {
+      const end = Math.max(event.charIndex + (event.charLength || 1), 0);
+      hooks.onProgress?.(spokenText.slice(0, end));
+    };
     utterance.onend = () => resolve();
     utterance.onerror = () => reject(new Error('Browser speech failed'));
     signal.addEventListener(
@@ -57,6 +103,7 @@ async function playStreamedMp3(
   response: Response,
   signal: AbortSignal,
   setAudio: (audio: HTMLAudioElement | null) => void,
+  hooks: VoiceHooks,
 ) {
   if (!response.body) throw new Error('Voice stream was empty');
 
@@ -72,6 +119,7 @@ async function playStreamedMp3(
     audio.src = url;
     try {
       await audio.play();
+      hooks.onStart?.();
       await new Promise<void>((resolve, reject) => {
         audio.onended = () => resolve();
         audio.onerror = () => reject(new Error('Voice playback failed'));
@@ -120,6 +168,7 @@ async function playStreamedMp3(
       if (!started) {
         started = true;
         await audio.play();
+        hooks.onStart?.();
       }
     }
     if (mediaSource.readyState === 'open') mediaSource.endOfStream();
@@ -144,6 +193,7 @@ export async function speakJudge(
   provider: VoiceProvider,
   signal: AbortSignal,
   setAudio: (audio: HTMLAudioElement | null) => void,
+  hooks: VoiceHooks = {},
 ) {
   if (signal.aborted) throw abortError();
   if (provider === 'elevenlabs') {
@@ -155,12 +205,12 @@ export async function speakJudge(
         signal,
       });
       if (!response.ok) throw new Error('ElevenLabs unavailable');
-      await playStreamedMp3(response, signal, setAudio);
+      await playStreamedMp3(response, signal, setAudio, hooks);
       return 'elevenlabs' as const;
     } catch (error) {
       if (signal.aborted) throw error;
     }
   }
-  await speakWithBrowser(judgeId, text, signal);
+  await speakWithBrowser(judgeId, text, signal, hooks);
   return 'browser' as const;
 }
