@@ -939,6 +939,94 @@ textarea {
   box-shadow: inset 0 0 13vw 4vw #000;
   opacity: 0.72;
 }
+.arena-launch-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  overflow: hidden;
+  color: #ffc857;
+  background:
+    radial-gradient(circle at center, rgb(255 181 45 / 0.16), transparent 31%),
+    rgb(0 0 0 / 0.9);
+  box-shadow: inset 0 0 16vw #000;
+  backdrop-filter: blur(5px);
+}
+.arena-launch-countdown::before,
+.arena-launch-countdown::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: min(62vw, 760px);
+  aspect-ratio: 1;
+  border: 1px solid rgb(255 200 89 / 0.32);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: arena-countdown-ring 0.85s ease-out both;
+}
+.arena-launch-countdown::after {
+  width: min(42vw, 510px);
+  border-color: rgb(101 230 255 / 0.2);
+  animation-delay: 0.08s;
+}
+.arena-launch-countdown span {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-geist-mono);
+  font-size: clamp(12rem, 33vw, 35rem);
+  font-weight: 800;
+  line-height: 0.75;
+  letter-spacing: -0.12em;
+  text-indent: -0.12em;
+  text-shadow:
+    0 0 22px rgb(255 200 87 / 0.8),
+    0 0 90px rgb(255 155 28 / 0.55),
+    0 24px 80px #000;
+  animation: arena-countdown-number 0.85s cubic-bezier(0.17, 0.84, 0.3, 1) both;
+}
+.arena-launch-countdown small {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(3rem, 7vh, 6rem);
+  color: rgb(255 255 255 / 0.65);
+  font-size: clamp(0.7rem, 1vw, 0.9rem);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+}
+@keyframes arena-countdown-number {
+  0% {
+    opacity: 0;
+    filter: blur(18px);
+    transform: scale(1.6);
+  }
+  24% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.74);
+  }
+}
+@keyframes arena-countdown-ring {
+  from {
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+}
 .room-header {
   position: absolute;
   z-index: 12;

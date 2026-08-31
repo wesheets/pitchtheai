@@ -15,6 +15,7 @@ import type { Soundtrack } from '@/lib/soundtrack';
 
 type ToolStatus = 'checking' | 'ready' | 'browser-only';
 type PitchSnapshot = {
+  roomCode: string;
   openingDraft: string;
   pitch: {
     founderName: string;
@@ -105,7 +106,7 @@ const reactionSchema = {
 
 export function registerPitchTools(options: {
   getSnapshot: () => PitchSnapshot;
-  startPitch: (next?: Partial<PitchSnapshot['pitch']>) => void;
+  startPitch: (next?: Partial<PitchSnapshot['pitch']>) => Promise<void>;
   updatePitchDetails: (update: PitchDetailsUpdate) => void;
   applyJudgeRound: (roundSummary: string, reactions: JudgeReaction[]) => void;
   applyJudgeTurn: (roundSummary: string, reaction: JudgeReaction) => void;
@@ -154,8 +155,7 @@ export function registerPitchTools(options: {
   const tools: RegisterToolArgs[] = [
     {
       name: 'start_pitch',
-      description:
-        'Start or replace the visible Pitch The AI session. Use when the founder gives a company name, funding ask, and equity offer. This resets prior rounds, secretly varies judge patience, and starts the eight-minute clock.',
+      description: `Start or replace the visible Pitch The AI session in room ${options.getSnapshot().roomCode}. Use when the founder gives a company name, funding ask, and equity offer. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the eight-minute clock.`,
       inputSchema: {
         type: 'object',
         required: ['companyName', 'askAmount', 'equity'],
@@ -168,8 +168,8 @@ export function registerPitchTools(options: {
         },
         additionalProperties: false,
       },
-      execute: (args) => {
-        options.startPitch({
+      execute: async (args) => {
+        await options.startPitch({
           founderName:
             typeof args.founderName === 'string'
               ? args.founderName
@@ -184,6 +184,7 @@ export function registerPitchTools(options: {
         });
         return {
           started: true,
+          roomCode: options.getSnapshot().roomCode,
           companyName: args.companyName,
           askAmount: args.askAmount,
           equity: args.equity,
@@ -255,7 +256,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
+        'Read this tab\'s unique room code, opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
       inputSchema: {
         type: 'object',
         properties: {},

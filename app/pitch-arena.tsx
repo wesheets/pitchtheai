@@ -306,6 +306,12 @@ export function PitchArena() {
   const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
+  const [launchCount, setLaunchCount] = useState<3 | 2 | 1 | null>(null);
+  const [roomCode] = useState(() =>
+    typeof window === 'undefined'
+      ? '------'
+      : crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase(),
+  );
   const [captionsOn, setCaptionsOn] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [panelProfile, setPanelProfile] = useState<PanelProfile>(() =>
@@ -353,6 +359,7 @@ export function PitchArena() {
   const sessionIdRef = useRef(
     typeof window === 'undefined' ? '' : crypto.randomUUID(),
   );
+  const launchTokenRef = useRef(0);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundtrackStopRef = useRef<(() => void) | null>(null);
@@ -419,7 +426,9 @@ export function PitchArena() {
   }, []);
 
   const activeSoundtrack =
-    pitch.status === 'live' && pitch.secondsLeft <= 120
+    launchCount !== null
+      ? 'heartbeat'
+      : pitch.status === 'live' && pitch.secondsLeft <= 120
       ? 'heartbeat'
       : pitch.soundtrack;
 
@@ -551,7 +560,9 @@ export function PitchArena() {
   );
 
   const startPitch = useCallback(
-    (next?: Partial<PitchState>) => {
+    async (next?: Partial<PitchState>) => {
+      const launchToken = launchTokenRef.current + 1;
+      launchTokenRef.current = launchToken;
       const openingPitch = next?.transcript?.trim() || draftRef.current.trim();
       const nextPitch: PitchState = {
         ...DEFAULT_PITCH,
@@ -562,8 +573,6 @@ export function PitchArena() {
         secondsLeft: 8 * 60,
         startedAt: Date.now(),
       };
-      pitchRef.current = nextPitch;
-      setPitch(nextPitch);
       setReactions(DEFAULT_REACTIONS);
       setPanelProfile(createPanelProfile());
       setBids([]);
@@ -585,8 +594,18 @@ export function PitchArena() {
       setResponseSecondsLeft(45);
       twoMinuteWarningRef.current = false;
       setHandoffStatus('connected');
-      setHandoffMessage('Agent connected. The panel is live.');
+      setHandoffMessage('Agent connected. Entering the room…');
       stopVoices();
+      for (const count of [3, 2, 1] as const) {
+        if (launchTokenRef.current !== launchToken) return;
+        setLaunchCount(count);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 850));
+      }
+      if (launchTokenRef.current !== launchToken) return;
+      setLaunchCount(null);
+      pitchRef.current = nextPitch;
+      setPitch(nextPitch);
+      setHandoffMessage('Agent connected. The panel is live.');
     },
     [stopVoices],
   );
@@ -602,6 +621,7 @@ export function PitchArena() {
     try {
       await enableMusic();
       const result = await requestPitchAgent({
+        roomCode,
         founderName: pitch.founderName,
         companyName,
         askAmount: pitch.askAmount,
@@ -624,7 +644,7 @@ export function PitchArena() {
           : 'The agent handoff did not start.',
       );
     }
-  }, [draft, enableMusic, pitch]);
+  }, [draft, enableMusic, pitch, roomCode]);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -638,6 +658,8 @@ export function PitchArena() {
     }));
   }, []);
   const resetPitch = useCallback(() => {
+    launchTokenRef.current += 1;
+    setLaunchCount(null);
     setPitch(DEFAULT_PITCH);
     setReactions(DEFAULT_REACTIONS);
     setBids([]);
@@ -902,6 +924,7 @@ export function PitchArena() {
   useEffect(() => {
     const unregister = registerPitchTools({
       getSnapshot: () => ({
+        roomCode,
         openingDraft: draftRef.current,
         pitch: pitchRef.current,
         judges: JUDGES.map((judge) => ({
@@ -949,6 +972,7 @@ export function PitchArena() {
     startPitch,
     updatePitchDetails,
     reviewPitchEvidence,
+    roomCode,
     waitForFounderResponse,
   ]);
 
@@ -1191,9 +1215,12 @@ export function PitchArena() {
                 ? '10 site tools live'
                 : 'Site tools in Codex / ChatGPT'}
           </span>
-          <span className="tool-pill hidden lg:inline-flex">
+          <span
+            className="tool-pill hidden lg:inline-flex"
+            suppressHydrationWarning
+          >
             <AudioLines className="size-3.5 text-[#ffc857]" />
-            Judge voices beta
+            Room {roomCode}
           </span>
           <Button
             variant="ghost"
@@ -1264,16 +1291,38 @@ export function PitchArena() {
           </DropdownMenu>
         </div>
       </header>
+      {launchCount !== null && (
+        <output className="arena-launch-countdown" aria-live="assertive">
+          <span key={launchCount}>{launchCount}</span>
+          <small>Entering room {roomCode}</small>
+        </output>
+      )}
       <section
         className={`room-stage room-${pitch.status} ${pendingEvidenceCount > 0 && pitch.status === 'live' ? 'room-evidence-pending' : ''}`}
       >
         <div className="judge-monitor-grid">
           <div className="room-title">
             <p>
-              <Sparkles className="size-3.5" /> Live pitch arena
+              <Sparkles className="size-3.5" />{' '}
+              {pitch.status === 'lobby'
+                ? 'Live pitch arena'
+                : pitch.status === 'final'
+                  ? 'Final verdict'
+                  : `Now pitching · ${pitch.founderName}`}
             </p>
             <h1>
-              Make them lean in.<span>Before patience runs out.</span>
+              {pitch.status === 'lobby' ? (
+                <>
+                  Make them lean in.<span>Before patience runs out.</span>
+                </>
+              ) : (
+                <>
+                  {pitch.companyName}
+                  <span>
+                    {money(pitch.askAmount)} for {pitch.equity}%
+                  </span>
+                </>
+              )}
             </h1>
             <div
               className={`room-clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''}`}
@@ -1282,14 +1331,6 @@ export function PitchArena() {
               <strong>{formatClock(pitch.secondsLeft)}</strong>
               <small>Time remaining</small>
             </div>
-            {pitch.status !== 'lobby' && (
-              <div className="room-pitch-brief">
-                <strong>{pitch.companyName}</strong>
-                <span>
-                  {money(pitch.askAmount)} for {pitch.equity}%
-                </span>
-              </div>
-            )}
           </div>
           {JUDGES.map((judge) => {
             const reaction = reactions[judge.id];

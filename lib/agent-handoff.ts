@@ -1,4 +1,5 @@
 export type PitchAgentRequest = {
+  roomCode: string;
   founderName: string;
   companyName: string;
   askAmount: number;
@@ -25,6 +26,7 @@ type BringMyAiRequest = {
     };
   };
   context: {
+    roomCode: string;
     pitch: string;
     url: string;
     title: string;
@@ -43,6 +45,7 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
   return [
     'Join the four-judge panel on the open Pitch The AI page.',
+    `Target room code ${request.roomCode}. Before starting, call get_pitch_context and confirm its roomCode is exactly ${request.roomCode}. If it does not match, stop and report that the wrong Pitch The AI tab is attached.`,
     `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, and the supplied opening pitch.`,
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
@@ -80,6 +83,7 @@ export async function requestPitchAgent(
         },
       },
       context: {
+        roomCode: request.roomCode,
         pitch: request.pitch.trim(),
         url: window.location.href,
         title: document.title,
