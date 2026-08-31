@@ -31,10 +31,12 @@ import { registerPitchTools } from '@/lib/webmcp';
 
 export type JudgeId = 'maya' | 'julian' | 'priya' | 'theo';
 export type JudgeState = 'listening' | 'pressing' | 'bidding' | 'out';
+export type JudgeMood = 'skeptical' | 'intrigued' | 'impressed';
 export type JudgeReaction = {
   judgeId: JudgeId;
   state: JudgeState;
   interest: number;
+  mood: JudgeMood;
   spoken: string;
   question?: string;
 };
@@ -112,6 +114,7 @@ const JUDGES: Array<{
   color: string;
   voicePitch: number;
   voiceRate: number;
+  portrait: string;
 }> = [
   {
     id: 'maya',
@@ -121,6 +124,7 @@ const JUDGES: Array<{
     color: '#65e6ff',
     voicePitch: 1.12,
     voiceRate: 1.04,
+    portrait: '/judges/maya-cross-sprite.png',
   },
   {
     id: 'julian',
@@ -130,6 +134,7 @@ const JUDGES: Array<{
     color: '#bc9cff',
     voicePitch: 0.88,
     voiceRate: 0.96,
+    portrait: '/judges/julian-voss-sprite.png',
   },
   {
     id: 'priya',
@@ -139,6 +144,7 @@ const JUDGES: Array<{
     color: '#ffc857',
     voicePitch: 1,
     voiceRate: 1.08,
+    portrait: '/judges/priya-nair-sprite.png',
   },
   {
     id: 'theo',
@@ -148,6 +154,7 @@ const JUDGES: Array<{
     color: '#ff7189',
     voicePitch: 0.76,
     voiceRate: 0.92,
+    portrait: '/judges/theo-grant-sprite.png',
   },
 ];
 
@@ -181,6 +188,7 @@ const DEFAULT_REACTIONS = Object.fromEntries(
       judgeId: judge.id,
       state: 'listening',
       interest: 50,
+      mood: 'skeptical',
       spoken: 'Waiting for the pitch.',
     } satisfies JudgeReaction,
   ]),
@@ -249,6 +257,11 @@ function stateLabel(state: JudgeState) {
   if (state === 'pressing') return 'Patience fading';
   return 'Listening';
 }
+function portraitPosition(mood: JudgeMood) {
+  if (mood === 'intrigued') return '50%';
+  if (mood === 'impressed') return '100%';
+  return '0%';
+}
 
 export function PitchArena() {
   const [pitch, setPitch] = useState<PitchState>(DEFAULT_PITCH);
@@ -258,6 +271,7 @@ export function PitchArena() {
   const [draft, setDraft] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -360,6 +374,13 @@ export function PitchArena() {
         );
         utterance.pitch = judge.voicePitch;
         utterance.rate = judge.voiceRate;
+        utterance.onstart = () => setSpeakingJudge(line.judgeId);
+        const clearSpeaker = () =>
+          setSpeakingJudge((current) =>
+            current === line.judgeId ? null : current,
+          );
+        utterance.onend = clearSpeaker;
+        utterance.onerror = clearSpeaker;
         window.speechSynthesis.speak(utterance);
       }
     },
@@ -379,6 +400,7 @@ export function PitchArena() {
     setPanelProfile(createPanelProfile());
     setBids([]);
     setDraft('');
+    setSpeakingJudge(null);
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
   }, []);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
@@ -398,6 +420,7 @@ export function PitchArena() {
     setReactions(DEFAULT_REACTIONS);
     setBids([]);
     setDraft('');
+    setSpeakingJudge(null);
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
   }, []);
   const applyJudgeRound = useCallback(
@@ -405,7 +428,17 @@ export function PitchArena() {
       const normalized = Object.fromEntries(
         nextReactions.map((reaction) => [
           reaction.judgeId,
-          { ...reaction, interest: clampInterest(reaction.interest) },
+          {
+            ...reaction,
+            interest: clampInterest(reaction.interest),
+            mood:
+              reaction.mood ??
+              (reaction.interest >= 70
+                ? 'impressed'
+                : reaction.interest >= 45
+                  ? 'intrigued'
+                  : 'skeptical'),
+          },
         ]),
       ) as Partial<Record<JudgeId, JudgeReaction>>;
       setReactions((current) => ({ ...current, ...normalized }));
@@ -644,9 +677,19 @@ export function PitchArena() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#080a0f] text-[#f6f2e9]">
       <div className="arena-grid fixed inset-0 opacity-60" aria-hidden="true" />
+      <div className="arena-audience fixed inset-0" aria-hidden="true" />
+      <div className="arena-ceiling" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <b className="ceiling-light ceiling-light-1" />
+        <b className="ceiling-light ceiling-light-2" />
+        <b className="ceiling-light ceiling-light-3" />
+        <b className="ceiling-light ceiling-light-4" />
+      </div>
       <div className="spotlight spotlight-left" aria-hidden="true" />
       <div className="spotlight spotlight-right" aria-hidden="true" />
-      <header className="relative z-10 flex items-center justify-between border-b border-white/10 px-5 py-4 md:px-10">
+      <header className="arena-header relative z-10 flex items-center justify-between border-b border-white/10 px-5 py-4 md:px-10">
         <div className="flex items-center gap-3">
           <div className="brand-mark">
             <AudioLines className="size-5" />
@@ -693,7 +736,10 @@ export function PitchArena() {
             aria-label={voiceOn ? 'Mute judge voices' : 'Enable judge voices'}
             onClick={() => {
               setVoiceOn((current) => !current);
-              if (voiceOn) window.speechSynthesis?.cancel();
+              if (voiceOn) {
+                window.speechSynthesis?.cancel();
+                setSpeakingJudge(null);
+              }
             }}
           >
             {voiceOn ? <Volume2 /> : <VolumeX />}
@@ -701,7 +747,7 @@ export function PitchArena() {
         </div>
       </header>
 
-      <section className="relative z-10 mx-auto max-w-[1500px] px-4 pb-12 pt-6 md:px-8">
+      <section className="arena-shell relative z-10 mx-auto max-w-[1900px] px-4 pb-12 pt-6 md:px-8">
         <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="stage-panel p-5 md:p-7">
             <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
@@ -709,9 +755,9 @@ export function PitchArena() {
                 <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#ffc857]">
                   <Sparkles className="size-3.5" /> Live pitch arena
                 </p>
-                <h1 className="font-display max-w-4xl text-4xl leading-[0.96] tracking-[-0.035em] md:text-6xl">
+                <h1 className="arena-headline font-display max-w-4xl text-4xl leading-[0.96] tracking-[-0.035em] md:text-6xl">
                   Make them lean in.
-                  <span className="block text-white/35">
+                  <span className="arena-headline-accent block">
                     Before patience runs out.
                   </span>
                 </h1>
@@ -720,7 +766,10 @@ export function PitchArena() {
                 className={`clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''}`}
               >
                 <Clock3 className="size-4" />
-                <span>{formatClock(pitch.secondsLeft)}</span>
+                <span>
+                  <strong>{formatClock(pitch.secondsLeft)}</strong>
+                  <small>Time remaining</small>
+                </span>
               </div>
             </div>
 
@@ -764,13 +813,24 @@ export function PitchArena() {
                 return (
                   <Card
                     key={judge.id}
-                    className={`judge-card ${reaction.state === 'out' ? 'judge-out' : ''} ${reaction.state === 'bidding' ? 'judge-bidding' : ''}`}
+                    className={`judge-card ${reaction.state === 'out' ? 'judge-out' : ''} ${reaction.state === 'bidding' ? 'judge-bidding' : ''} ${speakingJudge === judge.id ? 'judge-speaking' : ''}`}
                     style={
                       { '--judge-color': judge.color } as React.CSSProperties
                     }
                   >
-                    <CardHeader className="flex-row items-center gap-3">
+                    <div
+                      className="judge-portrait"
+                      style={{
+                        backgroundImage: `url(${judge.portrait})`,
+                        backgroundPositionX: portraitPosition(reaction.mood),
+                      }}
+                    >
                       <div className="judge-avatar">{judge.initials}</div>
+                      <span className="judge-state">
+                        {stateLabel(reaction.state)}
+                      </span>
+                    </div>
+                    <CardHeader className="judge-heading flex-row items-end gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-display truncate text-lg">
                           {judge.name}
@@ -779,11 +839,20 @@ export function PitchArena() {
                           {judge.role}
                         </p>
                       </div>
-                      <span className="judge-state">
-                        {stateLabel(reaction.state)}
-                      </span>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <div className="judge-voice-row">
+                        <span>
+                          {speakingJudge === judge.id
+                            ? 'Speaking'
+                            : stateLabel(reaction.state)}
+                        </span>
+                        <div className="judge-wave" aria-hidden="true">
+                          {Array.from({ length: 9 }).map((_, index) => (
+                            <i key={index} />
+                          ))}
+                        </div>
+                      </div>
                       <div>
                         <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/35">
                           <span>Interest</span>
@@ -813,6 +882,17 @@ export function PitchArena() {
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
               <div className="pitch-console">
+                <div className="pitch-stage-topline">
+                  <span>Your pitch stage</span>
+                  <div
+                    className={`stage-wave ${listening ? 'stage-wave-live' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: 34 }).map((_, index) => (
+                      <i key={index} />
+                    ))}
+                  </div>
+                </div>
                 {pitch.status === 'lobby' ? (
                   <div className="flex min-h-32 flex-col items-start justify-center p-5">
                     <p className="text-sm text-white/45">Ready when you are.</p>

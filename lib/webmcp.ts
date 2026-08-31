@@ -1,6 +1,7 @@
 import type {
   Bid,
   JudgeId,
+  JudgeMood,
   JudgeReaction,
   LeaderboardEntry,
   PanelMood,
@@ -71,7 +72,7 @@ const judgeIdSchema = {
 };
 const reactionSchema = {
   type: 'object',
-  required: ['judgeId', 'state', 'interest', 'spoken'],
+  required: ['judgeId', 'state', 'interest', 'mood', 'spoken'],
   properties: {
     judgeId: judgeIdSchema,
     state: {
@@ -79,6 +80,10 @@ const reactionSchema = {
       enum: ['listening', 'pressing', 'bidding', 'out'],
     },
     interest: { type: 'number', minimum: 0, maximum: 100 },
+    mood: {
+      type: 'string',
+      enum: ['skeptical', 'intrigued', 'impressed'] satisfies JudgeMood[],
+    },
     spoken: { type: 'string', minLength: 1, maxLength: 500 },
     question: { type: 'string', maxLength: 300 },
   },
@@ -224,7 +229,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_judge_round',
       description:
-        'Post one visible and spoken reaction from each AI judge. Make personalities disagree. Vague, evasive, repetitive, or time-wasting answers should lower interest, become pressing, and eventually say exactly “I’m out.” Strong new evidence may raise interest or earn one surprising reversal. Occasionally introduce a plausible curveball, but never make outcomes arbitrary.',
+        'Post one visible and spoken reaction from each AI judge. Set each judge’s mood independently so their portrait changes between skeptical, intrigued, and impressed; the browser animates their glow and voice waveform while they speak. Make personalities disagree. Vague, evasive, repetitive, or time-wasting answers should lower interest, become pressing, and eventually say exactly “I’m out.” Strong new evidence may raise interest or earn one surprising reversal. Occasionally introduce a plausible curveball, but never make outcomes arbitrary.',
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judges'],

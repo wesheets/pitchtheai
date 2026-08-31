@@ -9,7 +9,7 @@ The twist is that the visitor’s browser agent plays the whole panel. The websi
 1. `start_pitch` — configure and start a new eight-minute session.
 2. `update_pitch_details` — update the company, ask, equity, immediate favorability, mood emoji, and soundtrack.
 3. `get_pitch_context` — read the transcript, uploaded evidence, panel state, and hidden game directives.
-4. `post_judge_round` — deliver one distinct visible/spoken reaction per judge.
+4. `post_judge_round` — deliver one distinct visible/spoken reaction and portrait mood per judge.
 5. `post_bid_round` — post two to four competing offers.
 6. `post_panel_verdict` — finish, speak the verdict, and save the score.
 7. `get_leaderboard` — read the public rankings.
@@ -20,6 +20,7 @@ Tools are registered from the top-level page with `document.modelContext.registe
 
 - Browser speech recognition captures the founder’s spoken pitch when supported.
 - Browser speech synthesis gives each judge a distinct voice profile.
+- Each judge has skeptical, intrigued, and impressed portrait states; the active speaker glows and drives a live waveform.
 - The project owner’s purchased ElevenLabs cinematic track is available alongside original Web Audio heartbeat, tension, fear, excitement, and triumph cues.
 - Optional captions keep the experience accessible and demo-friendly.
 - JPG, PNG, WebP, PDF, text, Markdown, and PPTX evidence can be attached to a pitch. Files are stored in R2 and their inspectable links are included in pitch context.
