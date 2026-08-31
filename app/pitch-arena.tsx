@@ -3,7 +3,6 @@
 import {
   ArrowUpRight,
   AudioLines,
-  CircleDollarSign,
   Clock3,
   FileText,
   Image as ImageIcon,
@@ -15,15 +14,14 @@ import {
   RotateCcw,
   Send,
   Sparkles,
-  Trophy,
   Volume2,
   VolumeX,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
@@ -758,22 +756,10 @@ export function PitchArena() {
   );
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#080a0f] text-[#f6f2e9]">
-      <div className="arena-grid fixed inset-0 opacity-60" aria-hidden="true" />
-      <div className="arena-audience fixed inset-0" aria-hidden="true" />
-      <div className="arena-ceiling" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <b className="ceiling-light ceiling-light-1" />
-        <b className="ceiling-light ceiling-light-2" />
-        <b className="ceiling-light ceiling-light-3" />
-        <b className="ceiling-light ceiling-light-4" />
-      </div>
-      <div className="spotlight spotlight-left" aria-hidden="true" />
-      <div className="spotlight spotlight-right" aria-hidden="true" />
-      <header className="arena-header relative z-10 flex items-center justify-between border-b border-white/10 px-5 py-4 md:px-10">
-        <div className="flex items-center gap-3">
+    <main className="room-arena text-[#f6f2e9]">
+      <div className="room-vignette" aria-hidden="true" />
+      <header className="room-header">
+        <div className="room-brand">
           <div className="brand-mark">
             <AudioLines className="size-5" />
           </div>
@@ -784,7 +770,7 @@ export function PitchArena() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="room-utilities">
           <span
             className={`tool-pill ${toolStatus === 'ready' ? 'tool-pill-ready' : ''}`}
           >
@@ -838,142 +824,84 @@ export function PitchArena() {
           </Button>
         </div>
       </header>
-
-      <section className="arena-shell relative z-10 mx-auto max-w-[1900px] px-4 pb-12 pt-6 md:px-8">
-        <div className="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="stage-panel p-5 md:p-7">
-            <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#ffc857]">
-                  <Sparkles className="size-3.5" /> Live pitch arena
-                </p>
-                <h1 className="arena-headline font-display max-w-4xl text-4xl leading-[0.96] tracking-[-0.035em] md:text-6xl">
-                  Make them lean in.
-                  <span className="arena-headline-accent block">
-                    Before patience runs out.
-                  </span>
-                </h1>
-              </div>
-              <div
-                className={`clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''}`}
-              >
-                <Clock3 className="size-4" />
-                <span>
-                  <strong>{formatClock(pitch.secondsLeft)}</strong>
-                  <small>Time remaining</small>
-                </span>
-              </div>
+      <section className="room-stage">
+        <div className="judge-monitor-grid">
+          <div className="room-title">
+            <p><Sparkles className="size-3.5" /> Live pitch arena</p>
+            <h1>Make them lean in.<span>Before patience runs out.</span></h1>
+            <div className={`room-clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''}`}>
+              <Clock3 className="size-4" />
+              <strong>{formatClock(pitch.secondsLeft)}</strong>
+              <small>Time remaining</small>
             </div>
-
-            <div className="pitch-readout">
-              <div
-                className="mood-orb"
-                aria-label={`Panel mood: ${MOOD_META[pitch.mood].label}`}
+          </div>
+          {JUDGES.map((judge) => {
+            const reaction = reactions[judge.id];
+            const judgeBid = bids.find((bid) => bid.judgeId === judge.id);
+            return (
+              <article
+                key={judge.id}
+                data-judge={judge.id}
+                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''}`}
+                style={{ '--judge-color': judge.color } as React.CSSProperties}
               >
-                <span>{MOOD_META[pitch.mood].emoji}</span>
-                <small>{MOOD_META[pitch.mood].label}</small>
-              </div>
-              <div className="pitch-identity min-w-0 flex-1">
-                <p className="truncate font-display text-xl">
-                  {pitch.companyName}
-                </p>
-                <p className="text-xs text-white/38">
-                  Asking {money(pitch.askAmount)} for {pitch.equity}%
-                </p>
-              </div>
-              <div className="favorability-readout">
-                <span>Immediate favorability</span>
-                <strong>
-                  {pitch.favorability}
-                  <small>/100</small>
-                </strong>
-              </div>
-              <div className="soundtrack-readout">
-                <Music2 className="size-3.5" />
-                <span>
-                  {pitch.soundtrack === 'silence'
-                    ? 'No score'
-                    : pitch.soundtrack}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {JUDGES.map((judge) => {
-                const reaction = reactions[judge.id];
-                const judgeBid = bids.find((bid) => bid.judgeId === judge.id);
-                return (
-                  <Card
-                    key={judge.id}
-                    className={`judge-card ${reaction.state === 'out' ? 'judge-out' : ''} ${reaction.state === 'bidding' ? 'judge-bidding' : ''} ${speakingJudge === judge.id ? 'judge-speaking' : ''}`}
-                    style={
-                      { '--judge-color': judge.color } as React.CSSProperties
-                    }
+                <div className="monitor-bezel">
+                  <div
+                    key={`${judge.id}-${reaction.mood}`}
+                    className="monitor-screen screen-change"
+                    style={{
+                      backgroundImage: `url(${judge.portrait})`,
+                      backgroundPositionX: portraitPosition(reaction.mood),
+                    }}
                   >
-                    <div
-                      className="judge-portrait"
-                      style={{
-                        backgroundImage: `url(${judge.portrait})`,
-                        backgroundPositionX: portraitPosition(reaction.mood),
-                      }}
-                    >
-                      <div className="judge-avatar">{judge.initials}</div>
-                      <span className="judge-state">
-                        {stateLabel(reaction.state)}
-                      </span>
+                    <div className="crt-scanlines" aria-hidden="true" />
+                    <span className="monitor-live">{stateLabel(reaction.state)}</span>
+                    <span className="monitor-interest-label">Interest <b>{reaction.interest}%</b></span>
+                    <div className="monitor-identity">
+                      <strong>{judge.name}</strong>
+                      <small>{judge.role}</small>
                     </div>
-                    <CardHeader className="judge-heading flex-row items-end gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-display truncate text-lg">
-                          {judge.name}
-                        </p>
-                        <p className="truncate text-[11px] uppercase tracking-[0.14em] text-white/40">
-                          {judge.role}
-                        </p>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="judge-voice-row">
-                        <span>
-                          {speakingJudge === judge.id
-                            ? 'Speaking'
-                            : stateLabel(reaction.state)}
-                        </span>
-                        <div className="judge-wave" aria-hidden="true">
-                          {Array.from({ length: 9 }).map((_, index) => (
-                            <i key={index} />
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-white/35">
-                          <span>Interest</span>
-                          <span>{reaction.interest}%</span>
-                        </div>
-                        <Progress
-                          value={reaction.interest}
-                          className="judge-progress"
-                        />
-                      </div>
-                      {captionsOn && (
-                        <p className="min-h-14 text-sm leading-relaxed text-white/72">
-                          “{reaction.spoken}”
-                        </p>
-                      )}
-                      {judgeBid && (
-                        <div className="bid-chip">
-                          <span>{money(judgeBid.amount)}</span>
-                          <small>for {judgeBid.equity}%</small>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                  </div>
+                  <div className="monitor-status-strip">
+                    <div className="judge-wave" aria-hidden="true">
+                      {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
+                    </div>
+                    <Progress value={reaction.interest} className="judge-progress monitor-interest" />
+                    {captionsOn && <p>“{reaction.spoken}”</p>}
+                    {judgeBid && <div className="monitor-bid">{money(judgeBid.amount)} <small>for {judgeBid.equity}%</small></div>}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
-              <div className="pitch-console">
+        <button
+          className={`stage-microphone ${listening ? 'stage-microphone-live' : ''}`}
+          onClick={toggleListening}
+          aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
+        >
+          <Image
+            src="/arena-microphone-v2.png"
+            alt=""
+            width={1024}
+            height={1536}
+            priority
+          />
+          <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
+        </button>
+
+        <div className="room-control-deck">
+          <div className="room-metrics" aria-label="Pitch status">
+            <div><span>Favorability</span><strong>{pitch.favorability}<small>/100</small></strong></div>
+            <div><span>Still in</span><strong>{activeJudges}<small>/4</small></strong></div>
+            <div><span>Round</span><strong>{pitch.round || 'Seed'}</strong></div>
+            <div><span>Best offer</span><strong>{leadingBid ? money(leadingBid.amount) : '—'}</strong></div>
+            <div className="room-mood"><span>Room read</span><strong>{MOOD_META[pitch.mood].emoji} {MOOD_META[pitch.mood].label}</strong></div>
+          </div>
+
+          <div className="room-console-grid">
+            <div className="pitch-console room-pitch-console">
                 <div className="pitch-stage-topline">
                   <span>Your pitch stage</span>
                   <div
@@ -1143,19 +1071,29 @@ export function PitchArena() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 lg:flex-col lg:items-stretch">
-                <button
-                  className="caption-toggle"
-                  onClick={() => setCaptionsOn((value) => !value)}
-                >
-                  {captionsOn ? 'Hide' : 'Show'} captions
-                </button>
-                <button className="caption-toggle" onClick={resetPitch}>
-                  <RotateCcw className="size-3.5" /> Reset
-                </button>
-              </div>
+            <div className="room-deck-actions">
+              <button className="caption-toggle" onClick={() => setCaptionsOn((value) => !value)}>
+                {captionsOn ? 'Hide' : 'Show'} captions
+              </button>
+              <button className="caption-toggle" onClick={resetPitch}>
+                <RotateCcw className="size-3.5" /> Reset room
+              </button>
+              <button
+                className={`caption-toggle ${musicOn ? 'deck-action-live' : ''}`}
+                onClick={() => {
+                  if (musicOn) {
+                    soundtrackStopRef.current?.();
+                    soundtrackStopRef.current = null;
+                    setMusicOn(false);
+                  } else void enableMusic();
+                }}
+              >
+                <Music2 className="size-3.5" /> {musicOn ? 'Score on' : 'Add score'}
+              </button>
             </div>
-            <div className="evidence-tray">
+          </div>
+
+          <div className="evidence-tray room-evidence-tray">
               <div className="flex flex-wrap items-center gap-2">
                 <label className="evidence-upload">
                   <input
@@ -1211,107 +1149,15 @@ export function PitchArena() {
                   ))}
                 </div>
               )}
-            </div>
           </div>
-
-          <aside className="space-y-4">
-            <div className="metric-grid">
-              <div className="metric-card">
-                <span>Still in</span>
-                <strong>
-                  {activeJudges}
-                  <small>/4</small>
-                </strong>
-              </div>
-              <div className="metric-card">
-                <span>Best offer</span>
-                <strong>{leadingBid ? money(leadingBid.amount) : '—'}</strong>
-              </div>
-              <div className="metric-card">
-                <span>Favorability</span>
-                <strong>
-                  {pitch.favorability}
-                  <small>/100</small>
-                </strong>
-              </div>
-              <div className="metric-card">
-                <span>Round</span>
-                <strong>{pitch.round}</strong>
-              </div>
+          {pitch.status === 'final' && (
+            <div className="room-final-verdict">
+              <span>Panel verdict</span>
+              <strong>{pitch.score}<small>/100</small></strong>
+              <p>{pitch.summary}</p>
+              <b>Raised {money(pitch.amountRaised ?? 0)}</b>
             </div>
-            {pitch.status === 'final' && (
-              <div className="final-card">
-                <p className="text-xs uppercase tracking-[0.18em] text-[#ffc857]">
-                  Panel verdict
-                </p>
-                <div className="my-3 flex items-end gap-2">
-                  <strong>{pitch.score}</strong>
-                  <span>/100</span>
-                </div>
-                <p className="text-sm leading-relaxed text-white/65">
-                  {pitch.summary}
-                </p>
-                <p className="mt-4 text-sm">
-                  <span className="text-white/40">Raised </span>
-                  {money(pitch.amountRaised ?? 0)}
-                </p>
-              </div>
-            )}
-            <div className="leaderboard-panel">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="flex items-center gap-2 font-display text-xl">
-                    <Trophy className="size-4 text-[#ffc857]" /> Pitch board
-                  </p>
-                  <p className="text-xs text-white/35">
-                    Top scores, then capital raised
-                  </p>
-                </div>
-                <span className="live-badge">Live</span>
-              </div>
-              <div className="space-y-1.5">
-                {leaderboard.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-sm text-white/35">
-                    First deal takes the board.
-                  </p>
-                ) : (
-                  leaderboard.slice(0, 6).map((entry, index) => (
-                    <div className="leader-row" key={entry.id}>
-                      <span className="leader-rank">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {entry.companyName}
-                        </p>
-                        <p className="truncate text-[11px] text-white/35">
-                          {entry.founderName}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-[#ffc857]">
-                          {entry.score}
-                        </p>
-                        <p className="text-[10px] text-white/35">
-                          {money(entry.amountRaised)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="how-card">
-              <CircleDollarSign className="size-5 text-[#65e6ff]" />
-              <div>
-                <p className="text-sm font-medium">The twist</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/42">
-                  Weak pitches burn patience. Strong pitches can turn the panel
-                  against itself in a live bidding war.
-                </p>
-              </div>
-            </div>
-          </aside>
+          )}
         </div>
       </section>
     </main>
