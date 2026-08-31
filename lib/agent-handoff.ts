@@ -47,6 +47,7 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
     'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response in consecutive 12-second slices until the shared 45-second response gate returns answered or timed_out. If a slice returns waiting, call it again immediately and do not let another judge speak. Evaluate the exact returned answer before continuing. Never invent or skip the founder response.',
+    'While the pitch is live, communicate only through Pitch The AI WebMCP tools. Do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may display normal WebMCP tool activity for the demo. Write in chat only if a tool fails, evidence cannot be opened, the founder answer cannot be recovered, or response latency exceeds 10 seconds. After the final verdict, provide one concise performance report.',
     'Keep each personality distinct. Specific, honest answers and evidence can improve the room; evasion, repetition, or silence should burn patience and become increasingly ruthless. Take judges out when warranted, and let strongly interested judges compete with live bids.',
   ].join('\n\n');
 }

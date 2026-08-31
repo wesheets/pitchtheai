@@ -255,7 +255,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer.',
+        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
       inputSchema: {
         type: 'object',
         properties: {},
