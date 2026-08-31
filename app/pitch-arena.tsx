@@ -907,6 +907,23 @@ export function PitchArena() {
                       Enter the room <ArrowUpRight data-icon="inline-end" />
                     </Button>
                   </div>
+                ) : pitch.status === 'final' ? (
+                  <div className="flex min-h-32 items-center justify-between gap-5 p-5">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#ffc857]">
+                        Pitch closed
+                      </p>
+                      <p className="mt-2 text-lg text-white/82">
+                        The panel has delivered its final verdict.
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <strong className="font-display text-4xl text-[#ffc857]">
+                        {pitch.score}
+                      </strong>
+                      <span className="text-xs text-white/30">/100</span>
+                    </div>
+                  </div>
                 ) : (
                   <div className="p-3">
                     <Textarea
