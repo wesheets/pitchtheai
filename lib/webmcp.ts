@@ -3,8 +3,11 @@ import type {
   JudgeId,
   JudgeReaction,
   LeaderboardEntry,
+  PanelMood,
+  PitchDetailsUpdate,
   PitchMaterial,
 } from '@/app/pitch-arena';
+import type { Soundtrack } from '@/lib/soundtrack';
 
 type ToolStatus = 'checking' | 'ready' | 'browser-only';
 type PitchSnapshot = {
@@ -17,6 +20,9 @@ type PitchSnapshot = {
     status: 'lobby' | 'live' | 'final';
     round: number;
     secondsLeft: number;
+    favorability: number;
+    mood: PanelMood;
+    soundtrack: Soundtrack;
     summary?: string;
     score?: number;
     amountRaised?: number;
@@ -82,6 +88,7 @@ const reactionSchema = {
 export function registerPitchTools(options: {
   getSnapshot: () => PitchSnapshot;
   startPitch: (next?: Partial<PitchSnapshot['pitch']>) => void;
+  updatePitchDetails: (update: PitchDetailsUpdate) => void;
   applyJudgeRound: (roundSummary: string, reactions: JudgeReaction[]) => void;
   applyBidRound: (bids: Bid[]) => void;
   finalizePitch: (result: {
@@ -138,6 +145,68 @@ export function registerPitchTools(options: {
           askAmount: args.askAmount,
           equity: args.equity,
         };
+      },
+    },
+    {
+      name: 'update_pitch_details',
+      description:
+        'Update the visible pitch brief and the panel’s immediate room read after extracting details from the founder’s speech or text. Call as soon as the company name, funding ask, and equity are known, then whenever those facts or the panel mood materially change. Select a soundtrack that matches the tension; the founder controls whether browser audio is enabled.',
+      inputSchema: {
+        type: 'object',
+        required: [
+          'companyName',
+          'askAmount',
+          'equity',
+          'favorability',
+          'mood',
+          'soundtrack',
+        ],
+        properties: {
+          founderName: { type: 'string', maxLength: 80 },
+          companyName: { type: 'string', minLength: 1, maxLength: 100 },
+          askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
+          equity: { type: 'number', minimum: 0.1, maximum: 100 },
+          favorability: { type: 'number', minimum: 0, maximum: 100 },
+          mood: {
+            type: 'string',
+            enum: [
+              'skeptical',
+              'surprised',
+              'impressed',
+              'tense',
+              'confused',
+              'excited',
+              'disappointed',
+            ],
+          },
+          soundtrack: {
+            type: 'string',
+            enum: [
+              'silence',
+              'cinematic',
+              'heartbeat',
+              'tense',
+              'fear',
+              'excitement',
+              'triumph',
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) => {
+        const update: PitchDetailsUpdate = {
+          founderName:
+            typeof args.founderName === 'string' ? args.founderName : undefined,
+          companyName: String(args.companyName),
+          askAmount: Number(args.askAmount),
+          equity: Number(args.equity),
+          favorability: Number(args.favorability),
+          mood: args.mood as PanelMood,
+          soundtrack: args.soundtrack as Soundtrack,
+        };
+        options.updatePitchDetails(update);
+        return { updated: true, details: update };
       },
     },
     {

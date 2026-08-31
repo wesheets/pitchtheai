@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   Mic,
   MicOff,
+  Music2,
   Paperclip,
   RotateCcw,
   Send,
@@ -25,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import { startSoundtrack, type Soundtrack } from '@/lib/soundtrack';
 import { registerPitchTools } from '@/lib/webmcp';
 
 export type JudgeId = 'maya' | 'julian' | 'priya' | 'theo';
@@ -60,6 +62,14 @@ export type PitchMaterial = {
   createdAt: number;
 };
 type PitchStatus = 'lobby' | 'live' | 'final';
+export type PanelMood =
+  | 'skeptical'
+  | 'surprised'
+  | 'impressed'
+  | 'tense'
+  | 'confused'
+  | 'excited'
+  | 'disappointed';
 type PitchState = {
   founderName: string;
   companyName: string;
@@ -69,9 +79,21 @@ type PitchState = {
   status: PitchStatus;
   round: number;
   secondsLeft: number;
+  favorability: number;
+  mood: PanelMood;
+  soundtrack: Soundtrack;
   summary?: string;
   score?: number;
   amountRaised?: number;
+};
+export type PitchDetailsUpdate = {
+  founderName?: string;
+  companyName: string;
+  askAmount: number;
+  equity: number;
+  favorability: number;
+  mood: PanelMood;
+  soundtrack: Soundtrack;
 };
 type PanelProfile = {
   rivalry: string;
@@ -138,6 +160,19 @@ const DEFAULT_PITCH: PitchState = {
   status: 'lobby',
   round: 0,
   secondsLeft: 8 * 60,
+  favorability: 50,
+  mood: 'skeptical',
+  soundtrack: 'silence',
+};
+
+const MOOD_META: Record<PanelMood, { emoji: string; label: string }> = {
+  skeptical: { emoji: '🤨', label: 'Skeptical' },
+  surprised: { emoji: '😮', label: 'Surprised' },
+  impressed: { emoji: '🤩', label: 'Impressed' },
+  tense: { emoji: '😬', label: 'Tense' },
+  confused: { emoji: '🤔', label: 'Confused' },
+  excited: { emoji: '🚀', label: 'Excited' },
+  disappointed: { emoji: '😑', label: 'Disappointed' },
 };
 const DEFAULT_REACTIONS = Object.fromEntries(
   JUDGES.map((judge) => [
@@ -223,6 +258,7 @@ export function PitchArena() {
   const [draft, setDraft] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [panelProfile, setPanelProfile] = useState<PanelProfile>(() =>
@@ -245,6 +281,8 @@ export function PitchArena() {
     typeof window === 'undefined' ? '' : crypto.randomUUID(),
   );
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const soundtrackStopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     pitchRef.current = pitch;
@@ -267,6 +305,27 @@ export function PitchArena() {
   useEffect(() => {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
+
+  const enableMusic = useCallback(async () => {
+    const AudioContextClass = window.AudioContext;
+    if (!audioContextRef.current)
+      audioContextRef.current = new AudioContextClass();
+    await audioContextRef.current.resume();
+    setMusicOn(true);
+  }, []);
+
+  useEffect(() => {
+    soundtrackStopRef.current?.();
+    soundtrackStopRef.current = null;
+    const context = audioContextRef.current;
+    if (!musicOn || !context || pitch.soundtrack === 'silence') return;
+    const stop = startSoundtrack(context, pitch.soundtrack);
+    soundtrackStopRef.current = stop;
+    return () => {
+      stop();
+      soundtrackStopRef.current = null;
+    };
+  }, [musicOn, pitch.soundtrack]);
 
   const fetchLeaderboard = useCallback(async () => {
     try {
@@ -321,6 +380,18 @@ export function PitchArena() {
     setBids([]);
     setDraft('');
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+  }, []);
+  const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
+    setPitch((current) => ({
+      ...current,
+      founderName: update.founderName?.trim() || current.founderName,
+      companyName: update.companyName.trim() || current.companyName,
+      askAmount: Math.max(0, Math.round(update.askAmount)),
+      equity: Math.max(0.1, Math.min(100, update.equity)),
+      favorability: clampInterest(update.favorability),
+      mood: update.mood,
+      soundtrack: update.soundtrack,
+    }));
   }, []);
   const resetPitch = useCallback(() => {
     setPitch(DEFAULT_PITCH);
@@ -431,6 +502,7 @@ export function PitchArena() {
         panelDirectives: panelProfileRef.current,
       }),
       startPitch,
+      updatePitchDetails,
       applyJudgeRound,
       applyBidRound,
       finalizePitch,
@@ -444,6 +516,7 @@ export function PitchArena() {
     fetchLeaderboard,
     finalizePitch,
     startPitch,
+    updatePitchDetails,
   ]);
 
   useEffect(() => {
@@ -591,9 +664,28 @@ export function PitchArena() {
           >
             <span className="tool-dot" />
             {toolStatus === 'ready'
-              ? '6 site tools live'
+              ? '7 site tools live'
               : 'Site tools in ChatGPT'}
           </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`rounded-full hover:bg-white/10 hover:text-white ${musicOn ? 'text-[#ffc857]' : 'text-white/60'}`}
+            aria-label={
+              musicOn ? 'Mute mood soundtrack' : 'Enable mood soundtrack'
+            }
+            onClick={() => {
+              if (musicOn) {
+                soundtrackStopRef.current?.();
+                soundtrackStopRef.current = null;
+                setMusicOn(false);
+              } else {
+                void enableMusic();
+              }
+            }}
+          >
+            <Music2 />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -629,6 +721,39 @@ export function PitchArena() {
               >
                 <Clock3 className="size-4" />
                 <span>{formatClock(pitch.secondsLeft)}</span>
+              </div>
+            </div>
+
+            <div className="pitch-readout">
+              <div
+                className="mood-orb"
+                aria-label={`Panel mood: ${MOOD_META[pitch.mood].label}`}
+              >
+                <span>{MOOD_META[pitch.mood].emoji}</span>
+                <small>{MOOD_META[pitch.mood].label}</small>
+              </div>
+              <div className="pitch-identity min-w-0 flex-1">
+                <p className="truncate font-display text-xl">
+                  {pitch.companyName}
+                </p>
+                <p className="text-xs text-white/38">
+                  Asking {money(pitch.askAmount)} for {pitch.equity}%
+                </p>
+              </div>
+              <div className="favorability-readout">
+                <span>Immediate favorability</span>
+                <strong>
+                  {pitch.favorability}
+                  <small>/100</small>
+                </strong>
+              </div>
+              <div className="soundtrack-readout">
+                <Music2 className="size-3.5" />
+                <span>
+                  {pitch.soundtrack === 'silence'
+                    ? 'No score'
+                    : pitch.soundtrack}
+                </span>
               </div>
             </div>
 
@@ -831,8 +956,11 @@ export function PitchArena() {
                 <strong>{leadingBid ? money(leadingBid.amount) : '—'}</strong>
               </div>
               <div className="metric-card">
-                <span>Your ask</span>
-                <strong>{money(pitch.askAmount)}</strong>
+                <span>Favorability</span>
+                <strong>
+                  {pitch.favorability}
+                  <small>/100</small>
+                </strong>
               </div>
               <div className="metric-card">
                 <span>Round</span>
