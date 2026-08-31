@@ -24,8 +24,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  hasBringMyAiAgentBridge,
+  requestPitchAgent,
+} from '@/lib/agent-handoff';
 import {
   getVoiceProvider,
   speakJudge,
@@ -280,6 +285,15 @@ export function PitchArena() {
   const [toolStatus, setToolStatus] = useState<
     'checking' | 'ready' | 'browser-only'
   >('checking');
+  const [agentHost, setAgentHost] = useState<'codex' | 'bringmyai'>(() =>
+    typeof window !== 'undefined' && hasBringMyAiAgentBridge()
+      ? 'bringmyai'
+      : 'codex',
+  );
+  const [handoffStatus, setHandoffStatus] = useState<
+    'idle' | 'requesting' | 'waiting' | 'connected' | 'error'
+  >('idle');
+  const [handoffMessage, setHandoffMessage] = useState('');
   const pitchRef = useRef(pitch);
   const reactionsRef = useRef(reactions);
   const bidsRef = useRef(bids);
@@ -433,10 +447,46 @@ export function PitchArena() {
       setPanelProfile(createPanelProfile());
       setBids([]);
       setDraft('');
+      setHandoffStatus('connected');
+      setHandoffMessage('Agent connected. The panel is live.');
       stopVoices();
     },
     [stopVoices],
   );
+  const requestAgent = useCallback(async () => {
+    const companyName = pitch.companyName.trim();
+    if (!companyName || companyName === 'Untitled venture') {
+      setHandoffStatus('error');
+      setHandoffMessage('Give the pitch a name first.');
+      return;
+    }
+    setHandoffStatus('requesting');
+    setHandoffMessage('Handing the room to your agent…');
+    try {
+      const result = await requestPitchAgent({
+        founderName: pitch.founderName,
+        companyName,
+        askAmount: pitch.askAmount,
+        equity: pitch.equity,
+        pitch: draft,
+      });
+      setAgentHost(result.host);
+      if (pitchRef.current.status === 'live') return;
+      setHandoffStatus('waiting');
+      setHandoffMessage(
+        result.host === 'bringmyai'
+          ? 'Request sent to your selected agent. The clock starts when it joins.'
+          : 'Panel prompt copied. Paste and send it in Codex; the clock starts when the agent joins.',
+      );
+    } catch (error) {
+      setHandoffStatus('error');
+      setHandoffMessage(
+        error instanceof Error
+          ? error.message
+          : 'The agent handoff did not start.',
+      );
+    }
+  }, [draft, pitch]);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -739,9 +789,11 @@ export function PitchArena() {
             className={`tool-pill ${toolStatus === 'ready' ? 'tool-pill-ready' : ''}`}
           >
             <span className="tool-dot" />
-            {toolStatus === 'ready'
-              ? '7 site tools live'
-              : 'Site tools in ChatGPT'}
+            {agentHost === 'bringmyai'
+              ? '7 tools + agent bridge'
+              : toolStatus === 'ready'
+                ? '7 site tools live'
+                : 'Site tools in Codex / ChatGPT'}
           </span>
           <span className="tool-pill hidden lg:inline-flex">
             <AudioLines className="size-3.5 text-[#ffc857]" />
@@ -934,19 +986,101 @@ export function PitchArena() {
                   </div>
                 </div>
                 {pitch.status === 'lobby' ? (
-                  <div className="flex min-h-32 flex-col items-start justify-center p-5">
-                    <p className="text-sm text-white/45">Ready when you are.</p>
-                    <p className="mt-1 max-w-xl text-lg text-white/85">
-                      Start a ChatGPT voice chat, ask it to run the panel, then
-                      pitch out loud. The arena gives every judge a different
-                      voice.
-                    </p>
-                    <Button
-                      className="mt-4 bg-[#ffc857] text-black hover:bg-[#ffd77e]"
-                      onClick={() => startPitch()}
-                    >
-                      Enter the room <ArrowUpRight data-icon="inline-end" />
-                    </Button>
+                  <div className="space-y-4 p-5">
+                    <div>
+                      <p className="text-sm text-white/45">Ready when you are.</p>
+                      <p className="mt-1 max-w-2xl text-lg text-white/85">
+                        Give the room your opening pitch. Bring My AI can send it
+                        straight to your selected agent; Codex uses a one-click
+                        copy handoff.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <Input
+                        aria-label="Founder name"
+                        value={pitch.founderName}
+                        onChange={(event) =>
+                          setPitch((current) => ({
+                            ...current,
+                            founderName: event.target.value,
+                          }))
+                        }
+                        placeholder="Founder name"
+                        className="border-white/10 bg-white/[0.04]"
+                      />
+                      <Input
+                        aria-label="Pitch name"
+                        value={pitch.companyName}
+                        onChange={(event) =>
+                          setPitch((current) => ({
+                            ...current,
+                            companyName: event.target.value,
+                          }))
+                        }
+                        placeholder="Pitch or company name"
+                        className="border-white/10 bg-white/[0.04]"
+                      />
+                      <Input
+                        aria-label="Ask amount"
+                        type="number"
+                        min={0}
+                        value={pitch.askAmount}
+                        onChange={(event) =>
+                          setPitch((current) => ({
+                            ...current,
+                            askAmount: Math.max(0, Number(event.target.value)),
+                          }))
+                        }
+                        placeholder="Ask amount"
+                        className="border-white/10 bg-white/[0.04]"
+                      />
+                      <Input
+                        aria-label="Equity percentage"
+                        type="number"
+                        min={0.1}
+                        max={100}
+                        step={0.1}
+                        value={pitch.equity}
+                        onChange={(event) =>
+                          setPitch((current) => ({
+                            ...current,
+                            equity: Math.max(
+                              0.1,
+                              Math.min(100, Number(event.target.value)),
+                            ),
+                          }))
+                        }
+                        placeholder="Equity %"
+                        className="border-white/10 bg-white/[0.04]"
+                      />
+                    </div>
+                    <Textarea
+                      aria-label="Opening pitch"
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      placeholder="What are you pitching? Tell the judges what it is, who wants it, your traction, and why you win."
+                      className="min-h-24 border-white/10 bg-white/[0.04] text-base"
+                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        className="bg-[#ffc857] text-black hover:bg-[#ffd77e]"
+                        onClick={() => void requestAgent()}
+                        disabled={handoffStatus === 'requesting'}
+                      >
+                        {handoffStatus === 'requesting'
+                          ? 'Calling your agent…'
+                          : agentHost === 'bringmyai'
+                            ? 'Start with my agent'
+                            : 'Send to Codex'}{' '}
+                        <ArrowUpRight data-icon="inline-end" />
+                      </Button>
+                      <output
+                        className={`text-sm ${handoffStatus === 'error' ? 'text-red-300' : 'text-white/48'}`}
+                      >
+                        {handoffMessage ||
+                          'The eight-minute clock waits for the agent.'}
+                      </output>
+                    </div>
                   </div>
                 ) : pitch.status === 'final' ? (
                   <div className="flex min-h-32 items-center justify-between gap-5 p-5">
