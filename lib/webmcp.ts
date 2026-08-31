@@ -228,6 +228,7 @@ export function registerPitchTools(options: {
             enum: [
               'silence',
               'cinematic',
+              'game',
               'heartbeat',
               'tense',
               'fear',

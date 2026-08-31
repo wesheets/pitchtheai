@@ -427,7 +427,7 @@ export function PitchArena() {
 
   const activeSoundtrack =
     launchCount !== null
-      ? 'heartbeat'
+      ? 'game'
       : pitch.status === 'live' && pitch.secondsLeft <= 120
       ? 'heartbeat'
       : pitch.soundtrack;
@@ -571,6 +571,7 @@ export function PitchArena() {
         status: 'live',
         round: 0,
         secondsLeft: 8 * 60,
+        soundtrack: next?.soundtrack ?? 'game',
         startedAt: Date.now(),
       };
       setReactions(DEFAULT_REACTIONS);

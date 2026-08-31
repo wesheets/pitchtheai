@@ -1,6 +1,7 @@
 export type Soundtrack =
   | 'silence'
   | 'cinematic'
+  | 'game'
   | 'heartbeat'
   | 'tense'
   | 'fear'
@@ -29,8 +30,12 @@ export function startSoundtrack(
   track: Soundtrack,
   volume = 0.42,
 ) {
-  if (track === 'cinematic') {
-    const audio = new Audio('/audio/elevenlabs-cinematic.mp3');
+  if (track === 'cinematic' || track === 'game') {
+    const audio = new Audio(
+      track === 'game'
+        ? '/audio/red-button-countdown.mp3'
+        : '/audio/elevenlabs-cinematic.mp3',
+    );
     audio.loop = true;
     audio.volume = Math.min(0.65, Math.max(0, volume));
     void audio.play().catch(() => undefined);
