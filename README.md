@@ -1,0 +1,56 @@
+# Pitch The AI
+
+Pitch your company to four AI judges. A weak pitch burns their patience until they say “I’m out.” A strong pitch can trigger competing offers, reversals, and a live bidding war.
+
+The twist is that the visitor’s browser agent plays the whole panel. The website provides the arena, transcript, timer, evidence tray, spoken reactions, offers, and public leaderboard; WebMCP gives ChatGPT or Codex six narrow tools for operating the live session.
+
+## WebMCP tools
+
+1. `start_pitch` — configure and start a new eight-minute session.
+2. `get_pitch_context` — read the transcript, uploaded evidence, panel state, and hidden game directives.
+3. `post_judge_round` — deliver one distinct visible/spoken reaction per judge.
+4. `post_bid_round` — post two to four competing offers.
+5. `post_panel_verdict` — finish, speak the verdict, and save the score.
+6. `get_leaderboard` — read the public rankings.
+
+Tools are registered from the top-level page with `document.modelContext.registerTool`. The app remains usable in ordinary browsers without WebMCP.
+
+## Voice and evidence
+
+- Browser speech recognition captures the founder’s spoken pitch when supported.
+- Browser speech synthesis gives each judge a distinct voice profile.
+- Optional captions keep the experience accessible and demo-friendly.
+- JPG, PNG, WebP, PDF, text, Markdown, and PPTX evidence can be attached to a pitch. Files are stored in R2 and their inspectable links are included in pitch context.
+
+## Stack
+
+- React 19 + Vinext
+- OpenAI Sites hosting
+- Cloudflare D1 for the leaderboard and upload metadata
+- Cloudflare R2 for pitch evidence
+- WebMCP site tools
+
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+Then open `http://localhost:3000`.
+
+Quality checks:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+## Challenge provenance
+
+This standalone project was created for the 2026 OpenAI WebMCP Challenge after August 25, 2026. It adapts the interaction premise of an earlier private pitch-game prototype, but the WebMCP architecture, browser-agent panel, original judge identities, evidence flow, public leaderboard, and this codebase were created for the challenge. It contains no Bring My AI or Promethios source code, secrets, trademarks, music, or third-party character likenesses.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
