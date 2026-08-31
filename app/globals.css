@@ -1065,8 +1065,10 @@ textarea {
   transform-style: preserve-3d;
   transform-origin: 50% 8%;
   translate: 0 0;
+  scale: 1;
   transition:
     translate 1.05s cubic-bezier(0.2, 0.78, 0.16, 1),
+    scale 0.42s cubic-bezier(0.2, 0.78, 0.16, 1),
     transform 0.5s ease,
     opacity 0.55s ease,
     filter 0.55s ease;
@@ -1373,6 +1375,52 @@ textarea {
   line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.judge-response-overlay {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 0.55rem);
+  left: 50%;
+  width: min(108%, 390px);
+  max-height: 5.25rem;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--judge-color) 45%, transparent);
+  border-radius: 13px;
+  padding: 0.55rem 0.65rem;
+  color: rgb(255 255 255 / 0.84);
+  background: linear-gradient(145deg, rgb(8 10 14 / 0.97), rgb(1 2 4 / 0.94));
+  box-shadow:
+    0 18px 38px rgb(0 0 0 / 0.72),
+    0 0 24px color-mix(in srgb, var(--judge-color) 12%, transparent);
+  transform: translateX(-50%);
+  scrollbar-width: thin;
+}
+.judge-response-overlay::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 1px;
+  height: 0.6rem;
+  background: var(--judge-color);
+  box-shadow: 0 0 8px var(--judge-color);
+}
+.judge-response-overlay strong {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--judge-color);
+  font: 700 8px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.judge-response-overlay p {
+  margin: 0;
+  font-size: clamp(8px, 0.6vw, 10px);
+  line-height: 1.35;
+}
+.judge-monitor.monitor-active-turn {
+  z-index: 18;
+  scale: 1.5;
 }
 .monitor-interest [data-slot='progress-track'] {
   height: 2px;
@@ -2151,6 +2199,9 @@ textarea {
     margin-top: 0;
     transform: rotateX(7deg);
   }
+  .judge-monitor.monitor-active-turn {
+    scale: 1.2;
+  }
   .stage-microphone {
     top: 500px;
   }
@@ -2220,6 +2271,18 @@ textarea {
   }
   .monitor-status-strip p {
     display: none;
+  }
+  .judge-monitor.monitor-active-turn {
+    scale: 1.05;
+  }
+  .judge-response-overlay {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    max-height: 4.5rem;
+    margin-top: 0.4rem;
+    transform: none;
   }
   .stage-microphone {
     display: none;

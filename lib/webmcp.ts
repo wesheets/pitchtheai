@@ -255,7 +255,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, call wait_for_founder_response, evaluate the exact answer, then continue. Never invent a founder answer.',
+        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -316,7 +316,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_judge_turn',
       description:
-        'Post exactly one visible and spoken judge turn. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response and use its returned answer or timeout before any other judge acts. Reward specific evidence and genuine answers; lower interest for evasive replies. A timeout should make the next turn sharper and more ruthless, not fabricate an answer.',
+        'Post exactly one visible and spoken judge turn. Keep it focused and under 90 spoken words. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Never post another judge while the founder gate is open. Reward specific evidence and genuine answers; lower interest for evasive replies. A timeout should make the next turn sharper and more ruthless, not fabricate an answer.',
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -343,22 +343,22 @@ export function registerPitchTools(options: {
     {
       name: 'wait_for_founder_response',
       description:
-        'Wait inside the current WebMCP turn for the human founder to answer the active judge by voice or text. The page returns the exact founder response, or a timed_out result after at most 45 seconds. Do not post another judge turn while this tool is waiting. After an answer, evaluate its specificity and evidence before changing the room.',
+        'Wait up to 12 seconds for the human founder to answer the active judge by voice or text. The question keeps one shared 45-second deadline across calls. If the result is waiting, call this tool again immediately; if answered, evaluate the exact response; if timed_out, burn patience. Never post another judge while the founder gate is open.',
       inputSchema: {
         type: 'object',
         properties: {
           timeoutSeconds: {
             type: 'number',
             minimum: 1,
-            maximum: 45,
-            default: 45,
+            maximum: 12,
+            default: 12,
           },
         },
         additionalProperties: false,
       },
       execute: (args) =>
         options.waitForFounderResponse(
-          typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 45,
+          typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
         ),
     },
     {

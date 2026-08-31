@@ -356,6 +356,7 @@ export function PitchArena() {
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundtrackStopRef = useRef<(() => void) | null>(null);
+  const twoMinuteWarningRef = useRef(false);
   const voiceAbortRef = useRef<AbortController | null>(null);
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
@@ -417,18 +418,23 @@ export function PitchArena() {
     setMusicOn(true);
   }, []);
 
+  const activeSoundtrack =
+    pitch.status === 'live' && pitch.secondsLeft <= 120
+      ? 'heartbeat'
+      : pitch.soundtrack;
+
   useEffect(() => {
     soundtrackStopRef.current?.();
     soundtrackStopRef.current = null;
     const context = audioContextRef.current;
-    if (!musicOn || !context || pitch.soundtrack === 'silence') return;
-    const stop = startSoundtrack(context, pitch.soundtrack, musicLevel);
+    if (!musicOn || !context || activeSoundtrack === 'silence') return;
+    const stop = startSoundtrack(context, activeSoundtrack, musicLevel);
     soundtrackStopRef.current = stop;
     return () => {
       stop();
       soundtrackStopRef.current = null;
     };
-  }, [musicLevel, musicOn, pitch.soundtrack]);
+  }, [activeSoundtrack, musicLevel, musicOn]);
 
   const fetchLeaderboard = useCallback(async () => {
     try {
@@ -577,6 +583,7 @@ export function PitchArena() {
       );
       setFounderTurn({ status: 'open' });
       setResponseSecondsLeft(45);
+      twoMinuteWarningRef.current = false;
       setHandoffStatus('connected');
       setHandoffMessage('Agent connected. The panel is live.');
       stopVoices();
@@ -638,6 +645,7 @@ export function PitchArena() {
     setFeed([]);
     setFounderTurn({ status: 'open' });
     setEvidenceReviews({});
+    twoMinuteWarningRef.current = false;
     soundtrackStopRef.current?.();
     soundtrackStopRef.current = null;
     setMusicOn(false);
@@ -706,7 +714,7 @@ export function PitchArena() {
   );
 
   const waitForFounderResponse = useCallback(
-    (timeoutSeconds = 45) => {
+    (timeoutSeconds = 12) => {
       const turn = founderTurnRef.current;
       if (turn.status === 'answered') {
         return Promise.resolve({
@@ -727,16 +735,45 @@ export function PitchArena() {
           new Error('A founder response wait is already active.'),
         );
       }
-      const remaining = Math.max(
+      const deadline = turn.deadline ?? Date.now();
+      const deadlineRemaining = Math.max(0, deadline - Date.now());
+      const waitSlice = Math.max(
         0,
-        Math.min(
-          timeoutSeconds * 1000,
-          (turn.deadline ?? Date.now()) - Date.now(),
-        ),
+        Math.min(timeoutSeconds * 1000, deadlineRemaining),
       );
       return new Promise<Record<string, unknown>>((resolve) => {
         const timer = window.setTimeout(() => {
           const latest = founderTurnRef.current;
+          const latestDeadline = latest.deadline ?? deadline;
+          if (latest.status === 'answered') {
+            responseWaiterRef.current = null;
+            resolve({
+              status: 'answered',
+              response: latest.lastResponse,
+              judgeId: latest.judgeId,
+              question: latest.question,
+            });
+            return;
+          }
+          if (latest.status !== 'awaiting') {
+            responseWaiterRef.current = null;
+            resolve({ status: latest.status });
+            return;
+          }
+          if (Date.now() < latestDeadline) {
+            responseWaiterRef.current = null;
+            resolve({
+              status: 'waiting',
+              judgeId: latest.judgeId,
+              question: latest.question,
+              secondsRemaining: Math.max(
+                1,
+                Math.ceil((latestDeadline - Date.now()) / 1000),
+              ),
+              next: 'Call wait_for_founder_response again immediately. Do not post another judge turn.',
+            });
+            return;
+          }
           const timedOut: FounderTurnState = { ...latest, status: 'timed_out' };
           founderTurnRef.current = timedOut;
           setFounderTurn(timedOut);
@@ -755,9 +792,9 @@ export function PitchArena() {
             status: 'timed_out',
             judgeId: latest.judgeId,
             question: latest.question,
-            waitedSeconds: Math.round(remaining / 1000),
+            waitedSeconds: 45,
           });
-        }, remaining);
+        }, waitSlice);
         responseWaiterRef.current = { resolve, timer };
       });
     },
@@ -926,6 +963,21 @@ export function PitchArena() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [pitch.status]);
+
+  useEffect(() => {
+    if (pitch.status !== 'live') {
+      twoMinuteWarningRef.current = false;
+      return;
+    }
+    if (pitch.secondsLeft > 120 || twoMinuteWarningRef.current) return;
+    twoMinuteWarningRef.current = true;
+    setPitch((current) => ({ ...current, mood: 'tense' }));
+    appendFeed({
+      kind: 'system',
+      author: 'Arena',
+      text: 'Two minutes remain. The music cuts. Heartbeat only.',
+    });
+  }, [appendFeed, pitch.secondsLeft, pitch.status]);
 
   useEffect(() => {
     if (founderTurn.status !== 'awaiting' || !founderTurn.deadline) return;
@@ -1111,6 +1163,7 @@ export function PitchArena() {
   const waitingJudge = founderTurn.judgeId
     ? JUDGES.find((judge) => judge.id === founderTurn.judgeId)
     : undefined;
+  const founderFeed = feed.filter((entry) => entry.kind !== 'judge').slice(-6);
 
   return (
     <main className="room-arena text-[#f6f2e9]">
@@ -1241,11 +1294,17 @@ export function PitchArena() {
           {JUDGES.map((judge) => {
             const reaction = reactions[judge.id];
             const judgeBid = bids.find((bid) => bid.judgeId === judge.id);
+            const isActiveTurn =
+              speakingJudge === judge.id ||
+              (founderTurn.status === 'awaiting' &&
+                founderTurn.judgeId === judge.id);
+            const hasJudgeResponse =
+              reaction.spoken && reaction.spoken !== 'Waiting for the pitch.';
             return (
               <article
                 key={judge.id}
                 data-judge={judge.id}
-                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''}`}
+                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''} ${isActiveTurn ? 'monitor-active-turn' : ''}`}
                 style={{ '--judge-color': judge.color } as React.CSSProperties}
               >
                 <div className="monitor-bezel">
@@ -1279,7 +1338,6 @@ export function PitchArena() {
                       value={reaction.interest}
                       className="judge-progress monitor-interest"
                     />
-                    {captionsOn && <p>“{reaction.spoken}”</p>}
                     {judgeBid && (
                       <div className="monitor-bid">
                         {money(judgeBid.amount)}{' '}
@@ -1288,6 +1346,12 @@ export function PitchArena() {
                     )}
                   </div>
                 </div>
+                {captionsOn && hasJudgeResponse && (
+                  <div className="judge-response-overlay" aria-live="polite">
+                    <strong>{judge.name}</strong>
+                    <p>“{reaction.spoken}”</p>
+                  </div>
+                )}
               </article>
             );
           })}
@@ -1498,13 +1562,13 @@ export function PitchArena() {
                     </div>
                   )}
                   <div className="pitch-dialogue-feed" aria-live="polite">
-                    {feed.length === 0 ? (
+                    {founderFeed.length === 0 ? (
                       <p className="feed-empty">
-                        The panel dialogue will stream here as each judge
-                        speaks.
+                        Your answers and arena events will appear here. Judge
+                        dialogue appears beneath each screen.
                       </p>
                     ) : (
-                      feed.slice(-10).map((entry) => (
+                      founderFeed.map((entry) => (
                         <div
                           key={entry.id}
                           className={`feed-entry feed-${entry.kind}`}

@@ -46,7 +46,7 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
     `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, and the supplied opening pitch.`,
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
-    'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response and remain inside that WebMCP call for up to 45 seconds. Evaluate the exact returned answer before the next judge speaks. Never invent or skip the founder response.',
+    'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response in consecutive 12-second slices until the shared 45-second response gate returns answered or timed_out. If a slice returns waiting, call it again immediately and do not let another judge speak. Evaluate the exact returned answer before continuing. Never invent or skip the founder response.',
     'Keep each personality distinct. Specific, honest answers and evidence can improve the room; evasion, repetition, or silence should burn patience and become increasingly ruthless. Take judges out when warranted, and let strongly interested judges compete with live bids.',
   ].join('\n\n');
 }
