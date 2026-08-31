@@ -18,7 +18,6 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -824,7 +823,7 @@ export function PitchArena() {
           </Button>
         </div>
       </header>
-      <section className="room-stage">
+      <section className={`room-stage room-${pitch.status}`}>
         <div className="judge-monitor-grid">
           <div className="room-title">
             <p><Sparkles className="size-3.5" /> Live pitch arena</p>
@@ -881,12 +880,13 @@ export function PitchArena() {
           onClick={toggleListening}
           aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
         >
-          <Image
+          {/* The microphone is a local transparent stage prop; preserving its exact alpha edge is preferable here. */}
+          {/* oxlint-disable-next-line next/no-img-element */}
+          <img
             src="/arena-microphone-v2.png"
             alt=""
             width={1024}
             height={1536}
-            priority
           />
           <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
         </button>
