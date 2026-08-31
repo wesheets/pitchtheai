@@ -1148,9 +1148,9 @@ textarea {
 }
 .judge-monitor[data-judge='maya'] {
   grid-column: 1;
-  margin-top: 0.5rem;
-  transform: translate3d(-30px, 10px, 138px) rotateX(7deg) rotateY(24deg)
-    rotateZ(-1.2deg) scale(1.08);
+  margin-top: 6.2rem;
+  transform: translate3d(45px, 4px, 35px) rotateX(8deg) rotateY(12deg)
+    rotateZ(-0.45deg) scale(0.88);
 }
 .judge-monitor[data-judge='julian'] {
   grid-column: 2;
@@ -1166,9 +1166,9 @@ textarea {
 }
 .judge-monitor[data-judge='theo'] {
   grid-column: 5;
-  margin-top: 0.5rem;
-  transform: translate3d(30px, 10px, 138px) rotateX(7deg) rotateY(-24deg)
-    rotateZ(1.2deg) scale(1.08);
+  margin-top: 6.2rem;
+  transform: translate3d(-45px, 4px, 35px) rotateX(8deg) rotateY(-12deg)
+    rotateZ(0.45deg) scale(0.88);
 }
 .monitor-bezel {
   position: relative;
