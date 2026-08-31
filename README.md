@@ -19,7 +19,9 @@ Tools are registered from the top-level page with `document.modelContext.registe
 ## Voice and evidence
 
 - Browser speech recognition captures the founder’s spoken pitch when supported.
-- Browser speech synthesis gives each judge a distinct voice profile.
+- A server-side ElevenLabs Flash stream gives each judge a distinct voice and starts playback as chunks arrive. The API key never reaches the browser.
+- Browser speech synthesis is an automatic fallback when ElevenLabs is not configured, its daily character budget is reached, or playback fails.
+- A ChatGPT voice session can run the WebMCP panel while the arena—not ChatGPT—speaks the four judge parts, allowing all four voices in one live pitch.
 - Each judge has skeptical, intrigued, and impressed portrait states; the active speaker glows and drives a live waveform.
 - The project owner’s purchased ElevenLabs cinematic track is available alongside original Web Audio heartbeat, tension, fear, excitement, and triumph cues.
 - Optional captions keep the experience accessible and demo-friendly.
@@ -37,6 +39,11 @@ Tools are registered from the top-level page with `document.modelContext.registe
 
 ```bash
 npm install
+```
+
+Copy `.env.example` to `.env.local` and add an ElevenLabs API key to enable streamed judge voices. Without it, the browser voice fallback works automatically.
+
+```bash
 npm run dev
 ```
 

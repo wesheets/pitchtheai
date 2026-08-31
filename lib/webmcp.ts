@@ -229,7 +229,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_judge_round',
       description:
-        'Post one visible and spoken reaction from each AI judge. Set each judge’s mood independently so their portrait changes between skeptical, intrigued, and impressed; the browser animates their glow and voice waveform while they speak. Make personalities disagree. Vague, evasive, repetitive, or time-wasting answers should lower interest, become pressing, and eventually say exactly “I’m out.” Strong new evidence may raise interest or earn one surprising reversal. Occasionally introduce a plausible curveball, but never make outcomes arbitrary.',
+        'Post one visible and spoken reaction from each AI judge. In a voice chat, do not read or imitate these reactions yourself: the arena speaks each judge with a distinct voice. Write currency and percentages as natural spoken words. Set each judge’s mood independently so their portrait changes between skeptical, intrigued, and impressed; the browser animates their glow and voice waveform while they speak. Make personalities disagree. Vague, evasive, repetitive, or time-wasting answers should lower interest, become pressing, and eventually say exactly “I’m out.” Strong new evidence may raise interest or earn one surprising reversal. Occasionally introduce a plausible curveball, but never make outcomes arbitrary.',
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judges'],
@@ -260,7 +260,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_bid_round',
       description:
-        'Create a visible, spoken competitive bid round when at least two judges strongly want the deal. Judges may counter, steal, or form a joint offer. Keep offers coherent with the founder’s ask and prior reactions; use escalating counteroffers only when the pitch earned genuine competition.',
+        'Create a visible, spoken competitive bid round when at least two judges strongly want the deal. In a voice chat, let the arena speak the offers instead of reading them yourself, and write amounts as natural spoken words. Judges may counter, steal, or form a joint offer. Keep offers coherent with the founder’s ask and prior reactions; use escalating counteroffers only when the pitch earned genuine competition.',
       inputSchema: {
         type: 'object',
         required: ['bids'],
@@ -299,7 +299,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_panel_verdict',
       description:
-        'End the visible pitch with a fair 0–100 score, capital raised, and concise spoken panel verdict. This saves the result to the public leaderboard. Use amountRaised 0 when no offer is accepted or all judges are out.',
+        'End the visible pitch with a fair 0–100 score, capital raised, and concise spoken panel verdict. In a voice chat, let the arena speak the verdict instead of reading it yourself. This saves the result to the public leaderboard. Use amountRaised 0 when no offer is accepted or all judges are out.',
       inputSchema: {
         type: 'object',
         required: ['score', 'summary', 'amountRaised'],

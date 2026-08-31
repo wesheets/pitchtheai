@@ -26,6 +26,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  getVoiceProvider,
+  speakJudge,
+  type VoiceProvider,
+} from '@/lib/judge-voice-client';
 import { startSoundtrack, type Soundtrack } from '@/lib/soundtrack';
 import { registerPitchTools } from '@/lib/webmcp';
 
@@ -112,8 +117,6 @@ const JUDGES: Array<{
   role: string;
   initials: string;
   color: string;
-  voicePitch: number;
-  voiceRate: number;
   portrait: string;
 }> = [
   {
@@ -122,8 +125,6 @@ const JUDGES: Array<{
     role: 'Market realist',
     initials: 'MC',
     color: '#65e6ff',
-    voicePitch: 1.12,
-    voiceRate: 1.04,
     portrait: '/judges/maya-cross-sprite.png',
   },
   {
@@ -132,8 +133,6 @@ const JUDGES: Array<{
     role: 'Brand contrarian',
     initials: 'JV',
     color: '#bc9cff',
-    voicePitch: 0.88,
-    voiceRate: 0.96,
     portrait: '/judges/julian-voss-sprite.png',
   },
   {
@@ -142,8 +141,6 @@ const JUDGES: Array<{
     role: 'Unit economics',
     initials: 'PN',
     color: '#ffc857',
-    voicePitch: 1,
-    voiceRate: 1.08,
     portrait: '/judges/priya-nair-sprite.png',
   },
   {
@@ -152,8 +149,6 @@ const JUDGES: Array<{
     role: 'Scale operator',
     initials: 'TG',
     color: '#ff7189',
-    voicePitch: 0.76,
-    voiceRate: 0.92,
     portrait: '/judges/theo-grant-sprite.png',
   },
 ];
@@ -271,6 +266,7 @@ export function PitchArena() {
   const [draft, setDraft] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(true);
@@ -297,6 +293,9 @@ export function PitchArena() {
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundtrackStopRef = useRef<(() => void) | null>(null);
+  const voiceAbortRef = useRef<AbortController | null>(null);
+  const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceProviderRef = useRef<VoiceProvider>('checking');
 
   useEffect(() => {
     pitchRef.current = pitch;
@@ -319,6 +318,21 @@ export function PitchArena() {
   useEffect(() => {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
+  useEffect(() => {
+    voiceProviderRef.current = voiceProvider;
+  }, [voiceProvider]);
+  useEffect(() => {
+    let active = true;
+    void getVoiceProvider().then((provider) => {
+      if (active) setVoiceProvider(provider);
+    });
+    return () => {
+      active = false;
+      voiceAbortRef.current?.abort();
+      activeVoiceAudioRef.current?.pause();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const enableMusic = useCallback(async () => {
     const AudioContextClass = window.AudioContext;
@@ -357,52 +371,72 @@ export function PitchArena() {
     return () => window.clearTimeout(request);
   }, [fetchLeaderboard]);
 
+  const stopVoices = useCallback(() => {
+    voiceAbortRef.current?.abort();
+    voiceAbortRef.current = null;
+    activeVoiceAudioRef.current?.pause();
+    activeVoiceAudioRef.current = null;
+    window.speechSynthesis?.cancel();
+    setSpeakingJudge(null);
+  }, []);
+
   const speak = useCallback(
     (lines: Array<{ judgeId: JudgeId; text: string }>) => {
-      if (
-        !voiceOnRef.current ||
-        typeof window === 'undefined' ||
-        !window.speechSynthesis
-      )
-        return;
-      window.speechSynthesis.cancel();
-      for (const line of lines) {
-        const judge = JUDGES.find((item) => item.id === line.judgeId);
-        if (!judge) continue;
-        const utterance = new SpeechSynthesisUtterance(
-          `${judge.name}. ${line.text}`,
-        );
-        utterance.pitch = judge.voicePitch;
-        utterance.rate = judge.voiceRate;
-        utterance.onstart = () => setSpeakingJudge(line.judgeId);
-        const clearSpeaker = () =>
-          setSpeakingJudge((current) =>
-            current === line.judgeId ? null : current,
-          );
-        utterance.onend = clearSpeaker;
-        utterance.onerror = clearSpeaker;
-        window.speechSynthesis.speak(utterance);
-      }
+      if (!voiceOnRef.current || typeof window === 'undefined') return;
+      stopVoices();
+      const controller = new AbortController();
+      voiceAbortRef.current = controller;
+      void (async () => {
+        for (const line of lines) {
+          if (controller.signal.aborted || !voiceOnRef.current) break;
+          setSpeakingJudge(line.judgeId);
+          try {
+            const provider = await speakJudge(
+              line.judgeId,
+              line.text,
+              voiceProviderRef.current,
+              controller.signal,
+              (audio) => {
+                activeVoiceAudioRef.current = audio;
+              },
+            );
+            if (
+              provider === 'browser' &&
+              voiceProviderRef.current !== 'browser'
+            )
+              setVoiceProvider('browser');
+          } catch {
+            if (!controller.signal.aborted) setVoiceProvider('browser');
+          } finally {
+            setSpeakingJudge((current) =>
+              current === line.judgeId ? null : current,
+            );
+          }
+        }
+        if (voiceAbortRef.current === controller) voiceAbortRef.current = null;
+      })();
     },
-    [],
+    [stopVoices],
   );
 
-  const startPitch = useCallback((next?: Partial<PitchState>) => {
-    setPitch({
-      ...DEFAULT_PITCH,
-      ...next,
-      transcript: '',
-      status: 'live',
-      round: 0,
-      secondsLeft: 8 * 60,
-    });
-    setReactions(DEFAULT_REACTIONS);
-    setPanelProfile(createPanelProfile());
-    setBids([]);
-    setDraft('');
-    setSpeakingJudge(null);
-    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
-  }, []);
+  const startPitch = useCallback(
+    (next?: Partial<PitchState>) => {
+      setPitch({
+        ...DEFAULT_PITCH,
+        ...next,
+        transcript: '',
+        status: 'live',
+        round: 0,
+        secondsLeft: 8 * 60,
+      });
+      setReactions(DEFAULT_REACTIONS);
+      setPanelProfile(createPanelProfile());
+      setBids([]);
+      setDraft('');
+      stopVoices();
+    },
+    [stopVoices],
+  );
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -420,9 +454,8 @@ export function PitchArena() {
     setReactions(DEFAULT_REACTIONS);
     setBids([]);
     setDraft('');
-    setSpeakingJudge(null);
-    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
-  }, []);
+    stopVoices();
+  }, [stopVoices]);
   const applyJudgeRound = useCallback(
     (roundSummary: string, nextReactions: JudgeReaction[]) => {
       const normalized = Object.fromEntries(
@@ -710,6 +743,14 @@ export function PitchArena() {
               ? '7 site tools live'
               : 'Site tools in ChatGPT'}
           </span>
+          <span className="tool-pill hidden lg:inline-flex">
+            <AudioLines className="size-3.5 text-[#ffc857]" />
+            {voiceProvider === 'elevenlabs'
+              ? '4 streamed voices'
+              : voiceProvider === 'checking'
+                ? 'Checking voices'
+                : '4 browser voices'}
+          </span>
           <Button
             variant="ghost"
             size="icon"
@@ -737,8 +778,7 @@ export function PitchArena() {
             onClick={() => {
               setVoiceOn((current) => !current);
               if (voiceOn) {
-                window.speechSynthesis?.cancel();
-                setSpeakingJudge(null);
+                stopVoices();
               }
             }}
           >
@@ -897,8 +937,9 @@ export function PitchArena() {
                   <div className="flex min-h-32 flex-col items-start justify-center p-5">
                     <p className="text-sm text-white/45">Ready when you are.</p>
                     <p className="mt-1 max-w-xl text-lg text-white/85">
-                      Open this page in ChatGPT, ask it to join the panel, then
-                      pitch by voice or text.
+                      Start a ChatGPT voice chat, ask it to run the panel, then
+                      pitch out loud. The arena gives every judge a different
+                      voice.
                     </p>
                     <Button
                       className="mt-4 bg-[#ffc857] text-black hover:bg-[#ffd77e]"
