@@ -914,16 +914,16 @@ export function PitchArena() {
                   </div>
                 </div>
                 {pitch.status === 'lobby' ? (
-                  <div className="space-y-3 p-3.5">
+                  <div className="space-y-2 p-2.5">
                     <div>
-                      <p className="text-sm text-white/45">Ready when you are.</p>
-                      <p className="mt-1 max-w-2xl text-lg text-white/85">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">Ready when you are</p>
+                      <p className="mt-0.5 max-w-2xl text-sm text-white/80">
                         Give the room your opening pitch. Bring My AI can send it
                         straight to your selected agent; Codex uses a one-click
                         copy handoff.
                       </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       <Input
                         aria-label="Founder name"
                         value={pitch.founderName}
@@ -934,7 +934,7 @@ export function PitchArena() {
                           }))
                         }
                         placeholder="Founder name"
-                        className="border-white/10 bg-white/[0.04]"
+                        className="h-8 border-white/10 bg-white/[0.04] text-xs"
                       />
                       <Input
                         aria-label="Pitch name"
@@ -946,7 +946,7 @@ export function PitchArena() {
                           }))
                         }
                         placeholder="Pitch or company name"
-                        className="border-white/10 bg-white/[0.04]"
+                        className="h-8 border-white/10 bg-white/[0.04] text-xs"
                       />
                       <Input
                         aria-label="Ask amount"
@@ -960,7 +960,7 @@ export function PitchArena() {
                           }))
                         }
                         placeholder="Ask amount"
-                        className="border-white/10 bg-white/[0.04]"
+                        className="h-8 border-white/10 bg-white/[0.04] text-xs"
                       />
                       <Input
                         aria-label="Equity percentage"
@@ -979,7 +979,7 @@ export function PitchArena() {
                           }))
                         }
                         placeholder="Equity %"
-                        className="border-white/10 bg-white/[0.04]"
+                        className="h-8 border-white/10 bg-white/[0.04] text-xs"
                       />
                     </div>
                     <Textarea
@@ -987,11 +987,11 @@ export function PitchArena() {
                       value={draft}
                       onChange={(event) => setDraft(event.target.value)}
                       placeholder="What are you pitching? Tell the judges what it is, who wants it, your traction, and why you win."
-                      className="min-h-24 border-white/10 bg-white/[0.04] text-base"
+                      className="min-h-16 resize-none border-white/10 bg-white/[0.04] text-sm"
                     />
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
-                        className="bg-[#ffc857] text-black hover:bg-[#ffd77e]"
+                        className="h-8 bg-[#ffc857] text-black hover:bg-[#ffd77e]"
                         onClick={() => void requestAgent()}
                         disabled={handoffStatus === 'requesting'}
                       >
@@ -1003,7 +1003,7 @@ export function PitchArena() {
                         <ArrowUpRight data-icon="inline-end" />
                       </Button>
                       <output
-                        className={`text-sm ${handoffStatus === 'error' ? 'text-red-300' : 'text-white/48'}`}
+                        className={`text-xs ${handoffStatus === 'error' ? 'text-red-300' : 'text-white/48'}`}
                       >
                         {handoffMessage ||
                           'The eight-minute clock waits for the agent.'}
