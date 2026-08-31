@@ -6,6 +6,8 @@ export type StoredLeaderboardEntry = {
   companyName: string;
   score: number;
   amountRaised: number;
+  askAmount: number;
+  durationSeconds: number;
   createdAt: number;
 };
 
@@ -18,9 +20,18 @@ async function ensureLeaderboard() {
       score INTEGER NOT NULL,
       amount_raised INTEGER NOT NULL DEFAULT 0,
       ask_amount INTEGER NOT NULL DEFAULT 0,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     )
   `).run();
+  const columns = await env.DB.prepare('PRAGMA table_info(leaderboard)').all<{
+    name: string;
+  }>();
+  if (!columns.results.some((column) => column.name === 'duration_seconds')) {
+    await env.DB.prepare(
+      'ALTER TABLE leaderboard ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT 0',
+    ).run();
+  }
   await env.DB.prepare(`
     CREATE INDEX IF NOT EXISTS idx_leaderboard_score_capital
     ON leaderboard(score DESC, amount_raised DESC, created_at ASC)
@@ -31,7 +42,8 @@ export async function listLeaderboard(limit = 20) {
   await ensureLeaderboard();
   const result = await env.DB.prepare(
     `SELECT id, founder_name AS founderName, company_name AS companyName,
-      score, amount_raised AS amountRaised, created_at AS createdAt
+      score, amount_raised AS amountRaised, ask_amount AS askAmount,
+      duration_seconds AS durationSeconds, created_at AS createdAt
      FROM leaderboard
      ORDER BY score DESC, amount_raised DESC, created_at ASC
      LIMIT ?`,
@@ -47,6 +59,7 @@ export async function saveLeaderboardEntry(input: {
   score: number;
   amountRaised: number;
   askAmount: number;
+  durationSeconds: number;
 }) {
   await ensureLeaderboard();
   const entry = {
@@ -62,12 +75,16 @@ export async function saveLeaderboardEntry(input: {
       0,
       Math.min(1_000_000_000, Math.round(input.askAmount)),
     ),
+    durationSeconds: Math.max(
+      0,
+      Math.min(8 * 60 * 60, Math.round(input.durationSeconds)),
+    ),
     createdAt: Date.now(),
   };
   await env.DB.prepare(
     `INSERT INTO leaderboard
-      (id, founder_name, company_name, score, amount_raised, ask_amount, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (id, founder_name, company_name, score, amount_raised, ask_amount, duration_seconds, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       entry.id,
@@ -76,6 +93,7 @@ export async function saveLeaderboardEntry(input: {
       entry.score,
       entry.amountRaised,
       entry.askAmount,
+      entry.durationSeconds,
       entry.createdAt,
     )
     .run();

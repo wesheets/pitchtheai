@@ -1,8 +1,15 @@
 import { listLeaderboard, saveLeaderboardEntry } from '@/db/leaderboard';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return Response.json({ entries: await listLeaderboard() });
+    const limit = Math.max(
+      1,
+      Math.min(
+        100,
+        Number(new URL(request.url).searchParams.get('limit')) || 20,
+      ),
+    );
+    return Response.json({ entries: await listLeaderboard(limit) });
   } catch (error) {
     return Response.json(
       {
@@ -33,6 +40,7 @@ export async function POST(request: Request) {
       score: Number(body.score),
       amountRaised: Number(body.amountRaised),
       askAmount: Number(body.askAmount),
+      durationSeconds: Number(body.durationSeconds) || 0,
     });
     return Response.json({ entry }, { status: 201 });
   } catch (error) {

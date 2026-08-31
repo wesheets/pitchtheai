@@ -21,6 +21,7 @@ type BringMyAiRequest = {
       companyName: string;
       askAmount: number;
       equity: number;
+      openingPitch: string;
     };
   };
   context: {
@@ -42,7 +43,7 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
   return [
     'Join the four-judge panel on the open Pitch The AI page.',
-    `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, and equity ${request.equity}.`,
+    `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, and the supplied opening pitch.`,
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
     'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response and remain inside that WebMCP call for up to 45 seconds. Evaluate the exact returned answer before the next judge speaks. Never invent or skip the founder response.',
@@ -74,6 +75,7 @@ export async function requestPitchAgent(
           companyName: request.companyName,
           askAmount: request.askAmount,
           equity: request.equity,
+          openingPitch: request.pitch.trim(),
         },
       },
       context: {

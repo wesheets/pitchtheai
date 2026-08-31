@@ -15,6 +15,7 @@ import type { Soundtrack } from '@/lib/soundtrack';
 
 type ToolStatus = 'checking' | 'ready' | 'browser-only';
 type PitchSnapshot = {
+  openingDraft: string;
   pitch: {
     founderName: string;
     companyName: string;
@@ -30,6 +31,8 @@ type PitchSnapshot = {
     summary?: string;
     score?: number;
     amountRaised?: number;
+    durationSeconds?: number;
+    startedAt?: number;
   };
   judges: Array<{
     id: JudgeId;
@@ -161,6 +164,7 @@ export function registerPitchTools(options: {
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
           askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
           equity: { type: 'number', minimum: 0.1, maximum: 100 },
+          openingPitch: { type: 'string', maxLength: 6000 },
         },
         additionalProperties: false,
       },
@@ -173,6 +177,10 @@ export function registerPitchTools(options: {
           companyName: String(args.companyName),
           askAmount: Number(args.askAmount),
           equity: Number(args.equity),
+          transcript:
+            typeof args.openingPitch === 'string'
+              ? args.openingPitch
+              : options.getSnapshot().openingDraft,
         });
         return {
           started: true,
@@ -247,7 +255,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read the live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, call wait_for_founder_response, evaluate the exact answer, then continue. Never invent a founder answer.',
+        'Read the opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, call wait_for_founder_response, evaluate the exact answer, then continue. Never invent a founder answer.',
       inputSchema: {
         type: 'object',
         properties: {},

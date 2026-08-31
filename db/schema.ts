@@ -7,6 +7,7 @@ export const leaderboard = sqliteTable('leaderboard', {
   score: integer('score').notNull(),
   amountRaised: integer('amount_raised').notNull().default(0),
   askAmount: integer('ask_amount').notNull().default(0),
+  durationSeconds: integer('duration_seconds').notNull().default(0),
   createdAt: integer('created_at').notNull(),
 });
 

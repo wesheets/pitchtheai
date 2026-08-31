@@ -3,6 +3,7 @@
 import {
   ArrowUpRight,
   AudioLines,
+  ChevronDown,
   Clock3,
   FileText,
   Image as ImageIcon,
@@ -14,6 +15,7 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  Trophy,
   Volume2,
   VolumeX,
   X,
@@ -24,6 +26,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   hasBringMyAiAgentBridge,
   requestPitchAgent,
@@ -60,6 +70,8 @@ export type LeaderboardEntry = {
   companyName: string;
   score: number;
   amountRaised: number;
+  askAmount: number;
+  durationSeconds: number;
   createdAt: number;
 };
 export type PitchMaterial = {
@@ -115,6 +127,8 @@ type PitchState = {
   summary?: string;
   score?: number;
   amountRaised?: number;
+  durationSeconds?: number;
+  startedAt?: number;
 };
 export type PitchDetailsUpdate = {
   founderName?: string;
@@ -187,7 +201,7 @@ const DEFAULT_PITCH: PitchState = {
   secondsLeft: 8 * 60,
   favorability: 50,
   mood: 'skeptical',
-  soundtrack: 'silence',
+  soundtrack: 'cinematic',
 };
 
 const MOOD_META: Record<PanelMood, { emoji: string; label: string }> = {
@@ -288,7 +302,7 @@ export function PitchArena() {
   const [bids, setBids] = useState<Bid[]>([]);
   const [draft, setDraft] = useState('');
   const [listening, setListening] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
@@ -327,6 +341,7 @@ export function PitchArena() {
   const leaderboardRef = useRef(leaderboard);
   const voiceOnRef = useRef(voiceOn);
   const materialsRef = useRef(materials);
+  const draftRef = useRef(draft);
   const evidenceReviewsRef = useRef(evidenceReviews);
   const feedRef = useRef(feed);
   const founderTurnRef = useRef(founderTurn);
@@ -360,6 +375,9 @@ export function PitchArena() {
   useEffect(() => {
     materialsRef.current = materials;
   }, [materials]);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   useEffect(() => {
     evidenceReviewsRef.current = evidenceReviews;
   }, [evidenceReviews]);
@@ -528,19 +546,35 @@ export function PitchArena() {
 
   const startPitch = useCallback(
     (next?: Partial<PitchState>) => {
-      setPitch({
+      const openingPitch = next?.transcript?.trim() || draftRef.current.trim();
+      const nextPitch: PitchState = {
         ...DEFAULT_PITCH,
         ...next,
-        transcript: '',
+        transcript: openingPitch,
         status: 'live',
         round: 0,
         secondsLeft: 8 * 60,
-      });
+        startedAt: Date.now(),
+      };
+      pitchRef.current = nextPitch;
+      setPitch(nextPitch);
       setReactions(DEFAULT_REACTIONS);
       setPanelProfile(createPanelProfile());
       setBids([]);
       setDraft('');
-      setFeed([]);
+      setFeed(
+        openingPitch
+          ? [
+              {
+                id: crypto.randomUUID(),
+                kind: 'founder',
+                author: 'Founder',
+                text: openingPitch,
+                createdAt: Date.now(),
+              },
+            ]
+          : [],
+      );
       setFounderTurn({ status: 'open' });
       setResponseSecondsLeft(45);
       setHandoffStatus('connected');
@@ -559,6 +593,7 @@ export function PitchArena() {
     setHandoffStatus('requesting');
     setHandoffMessage('Handing the room to your agent…');
     try {
+      await enableMusic();
       const result = await requestPitchAgent({
         founderName: pitch.founderName,
         companyName,
@@ -582,7 +617,7 @@ export function PitchArena() {
           : 'The agent handoff did not start.',
       );
     }
-  }, [draft, pitch]);
+  }, [draft, enableMusic, pitch]);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -603,6 +638,9 @@ export function PitchArena() {
     setFeed([]);
     setFounderTurn({ status: 'open' });
     setEvidenceReviews({});
+    soundtrackStopRef.current?.();
+    soundtrackStopRef.current = null;
+    setMusicOn(false);
     if (responseWaiterRef.current) {
       window.clearTimeout(responseWaiterRef.current.timer);
       responseWaiterRef.current.resolve({ status: 'cancelled' });
@@ -793,6 +831,10 @@ export function PitchArena() {
         score: Math.max(0, Math.min(100, Math.round(result.score))),
         summary: result.summary,
         amountRaised: Math.max(0, Math.round(result.amountRaised)),
+        durationSeconds: Math.max(
+          0,
+          Math.round((Date.now() - (snapshot.startedAt ?? Date.now())) / 1000),
+        ),
       };
       setPitch(finalPitch);
       try {
@@ -805,6 +847,7 @@ export function PitchArena() {
             score: finalPitch.score,
             amountRaised: finalPitch.amountRaised,
             askAmount: finalPitch.askAmount,
+            durationSeconds: finalPitch.durationSeconds,
           }),
         });
         await fetchLeaderboard();
@@ -822,6 +865,7 @@ export function PitchArena() {
   useEffect(() => {
     const unregister = registerPitchTools({
       getSnapshot: () => ({
+        openingDraft: draftRef.current,
         pitch: pitchRef.current,
         judges: JUDGES.map((judge) => ({
           id: judge.id,
@@ -895,40 +939,50 @@ export function PitchArena() {
     return () => window.clearInterval(timer);
   }, [founderTurn]);
 
+  const submitFounderResponse = useCallback(
+    (response: string) => {
+      const cleaned = response.trim();
+      if (!cleaned) return;
+      setPitch((current) => ({
+        ...current,
+        transcript: [current.transcript, cleaned].filter(Boolean).join('\n'),
+      }));
+      appendFeed({ kind: 'founder', author: 'Founder', text: cleaned });
+      const turn = founderTurnRef.current;
+      if (turn.status === 'awaiting') {
+        const answered: FounderTurnState = {
+          ...turn,
+          status: 'answered',
+          lastResponse: cleaned,
+        };
+        founderTurnRef.current = answered;
+        setFounderTurn(answered);
+        if (responseWaiterRef.current) {
+          window.clearTimeout(responseWaiterRef.current.timer);
+          responseWaiterRef.current.resolve({
+            status: 'answered',
+            response: cleaned,
+            judgeId: turn.judgeId,
+            question: turn.question,
+          });
+          responseWaiterRef.current = null;
+        } else {
+          setHandoffMessage(
+            'Answer recorded. Resume the agent so the panel can evaluate it.',
+          );
+        }
+      }
+      draftRef.current = '';
+      setDraft('');
+    },
+    [appendFeed],
+  );
+
   const submitDraft = useCallback(() => {
     const cleaned = draft.trim();
     if (!cleaned) return;
-    setPitch((current) => ({
-      ...current,
-      transcript: [current.transcript, cleaned].filter(Boolean).join('\n'),
-    }));
-    appendFeed({ kind: 'founder', author: 'Founder', text: cleaned });
-    const turn = founderTurnRef.current;
-    if (turn.status === 'awaiting') {
-      const answered: FounderTurnState = {
-        ...turn,
-        status: 'answered',
-        lastResponse: cleaned,
-      };
-      founderTurnRef.current = answered;
-      setFounderTurn(answered);
-      if (responseWaiterRef.current) {
-        window.clearTimeout(responseWaiterRef.current.timer);
-        responseWaiterRef.current.resolve({
-          status: 'answered',
-          response: cleaned,
-          judgeId: turn.judgeId,
-          question: turn.question,
-        });
-        responseWaiterRef.current = null;
-      } else {
-        setHandoffMessage(
-          'Answer recorded. Resume the agent so the panel can evaluate it.',
-        );
-      }
-    }
-    setDraft('');
-  }, [appendFeed, draft]);
+    submitFounderResponse(cleaned);
+  }, [draft, submitFounderResponse]);
 
   const uploadMaterials = useCallback(async (files: FileList | null) => {
     if (!files?.length || !sessionIdRef.current) return;
@@ -980,6 +1034,7 @@ export function PitchArena() {
       setListening(false);
       return;
     }
+    void enableMusic();
     type Recognition = {
       continuous: boolean;
       interimResults: boolean;
@@ -1008,18 +1063,32 @@ export function PitchArena() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
+    let recognitionFailed = false;
     recognition.onresult = (event) => {
       let text = '';
       for (let index = 0; index < event.results.length; index += 1)
         text += event.results[index][0].transcript;
-      setDraft(text.trim());
+      draftRef.current = text.trim();
+      setDraft(draftRef.current);
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      if (
+        !recognitionFailed &&
+        founderTurnRef.current.status === 'awaiting' &&
+        draftRef.current.trim()
+      ) {
+        submitFounderResponse(draftRef.current);
+      }
+    };
+    recognition.onerror = () => {
+      recognitionFailed = true;
+      setListening(false);
+    };
     recognition.start();
     recognitionRef.current = recognition;
     setListening(true);
-  }, [listening]);
+  }, [enableMusic, listening, submitFounderResponse]);
 
   const activeJudges = useMemo(
     () =>
@@ -1071,11 +1140,7 @@ export function PitchArena() {
           </span>
           <span className="tool-pill hidden lg:inline-flex">
             <AudioLines className="size-3.5 text-[#ffc857]" />
-            {voiceProvider === 'elevenlabs'
-              ? '4 streamed voices'
-              : voiceProvider === 'checking'
-                ? 'Checking voices'
-                : '4 browser voices'}
+            Judge voices beta
           </span>
           <Button
             variant="ghost"
@@ -1100,7 +1165,9 @@ export function PitchArena() {
             variant="ghost"
             size="icon"
             className="rounded-full text-white/60 hover:bg-white/10 hover:text-white"
-            aria-label={voiceOn ? 'Mute judge voices' : 'Enable judge voices'}
+            aria-label={
+              voiceOn ? 'Mute beta judge voices' : 'Enable beta judge voices'
+            }
             onClick={() => {
               setVoiceOn((current) => !current);
               if (voiceOn) {
@@ -1110,6 +1177,38 @@ export function PitchArena() {
           >
             {voiceOn ? <Volume2 /> : <VolumeX />}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+                  aria-label="Open arena menu"
+                >
+                  <ChevronDown />
+                </Button>
+              }
+            />
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              className="w-52 border border-[#ffc857]/20 bg-[#080a0d]/96 text-white shadow-2xl backdrop-blur-xl"
+            >
+              <DropdownMenuLabel className="text-[#ffc857]/70">
+                Pitch The AI
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() => {
+                  window.location.href = '/leaderboard';
+                }}
+              >
+                <Trophy /> Leaderboard
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
       <section
@@ -1342,15 +1441,15 @@ export function PitchArena() {
                       {handoffStatus === 'requesting'
                         ? 'Calling your agent…'
                         : agentHost === 'bringmyai'
-                          ? 'Start with my agent'
-                          : 'Send to Codex'}{' '}
+                          ? 'Enter with my agent'
+                          : 'Enter room with Codex'}{' '}
                       <ArrowUpRight data-icon="inline-end" />
                     </Button>
                     <output
                       className={`text-xs ${handoffStatus === 'error' ? 'text-red-300' : 'text-white/48'}`}
                     >
                       {handoffMessage ||
-                        'The eight-minute clock waits for the agent.'}
+                        'Entering unlocks the score. The clock waits for the agent.'}
                     </output>
                   </div>
                 </div>
@@ -1585,7 +1684,10 @@ export function PitchArena() {
                 <small>/100</small>
               </strong>
               <p>{pitch.summary}</p>
-              <b>Raised {money(pitch.amountRaised ?? 0)}</b>
+              <b>
+                Raised {money(pitch.amountRaised ?? 0)} ·{' '}
+                {formatClock(pitch.durationSeconds ?? 0)}
+              </b>
             </div>
           )}
         </div>
