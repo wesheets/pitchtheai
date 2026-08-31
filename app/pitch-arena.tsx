@@ -1355,7 +1355,7 @@ export function PitchArena() {
                 </div>
               </div>
               {pitch.status === 'lobby' ? (
-                <div className="space-y-2 p-2.5">
+                <div className="opening-pitch-form">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
                       Ready when you are
@@ -1430,9 +1430,9 @@ export function PitchArena() {
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     placeholder="What are you pitching? Tell the judges what it is, who wants it, your traction, and why you win."
-                    className="min-h-16 resize-none border-white/10 bg-white/[0.04] text-sm"
+                    className="opening-pitch-input resize-none border-white/10 bg-white/[0.04] text-sm"
                   />
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="opening-pitch-actions flex flex-wrap items-center gap-3">
                     <Button
                       className="h-8 bg-[#ffc857] text-black hover:bg-[#ffd77e]"
                       onClick={() => void requestAgent()}

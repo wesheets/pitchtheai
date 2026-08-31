@@ -1549,6 +1549,25 @@ textarea {
 .room-pitch-console textarea {
   min-height: 42px;
 }
+.opening-pitch-form {
+  display: grid;
+  min-height: 0;
+  gap: 0.5rem;
+  padding: 0.625rem;
+}
+.room-pitch-console .opening-pitch-input {
+  field-sizing: fixed;
+  height: clamp(76px, 9svh, 104px);
+  min-height: 76px;
+  max-height: 104px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgb(255 200 87 / 0.45) rgb(255 255 255 / 0.04);
+  scrollbar-width: thin;
+}
+.opening-pitch-actions {
+  min-height: 32px;
+}
 .room-deck-actions {
   display: grid;
   align-content: start;
