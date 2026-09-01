@@ -48,10 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  hasBringMyAiAgentBridge,
-  requestPitchAgent,
-} from '@/lib/agent-handoff';
+import { requestPitchAgent } from '@/lib/agent-handoff';
 import {
   getVoiceProvider,
   speakJudge,
@@ -577,11 +574,6 @@ export function PitchArena() {
     'off' | 'requesting' | 'live' | 'error'
   >('off');
   const [cameraMessage, setCameraMessage] = useState('');
-  const [agentHost, setAgentHost] = useState<'codex' | 'bringmyai'>(() =>
-    typeof window !== 'undefined' && hasBringMyAiAgentBridge()
-      ? 'bringmyai'
-      : 'codex',
-  );
   const [handoffStatus, setHandoffStatus] = useState<
     'idle' | 'requesting' | 'waiting' | 'connected' | 'error'
   >('idle');
@@ -1005,7 +997,7 @@ export function PitchArena() {
     setHandoffMessage('Handing the room to your agent…');
     try {
       await enableMusic();
-      const result = await requestPitchAgent({
+      await requestPitchAgent({
         roomCode,
         founderName,
         companyName,
@@ -1014,12 +1006,9 @@ export function PitchArena() {
         difficulty: pitch.difficulty,
         pitch: draft,
       });
-      setAgentHost(result.host);
       if (pitchRef.current.status === 'live') return;
       const waitingMessage =
-        result.host === 'bringmyai'
-          ? 'Request sent to your selected agent. The clock starts when it joins.'
-          : 'Panel prompt copied. Paste and send it in Codex; the clock starts when the agent joins.';
+        'Panel prompt copied. Paste and send it to your browser agent; the clock starts when it joins.';
       writeQueuedPitchSession({
         version: 1,
         roomCode,
@@ -3096,11 +3085,9 @@ export function PitchArena() {
             className={`tool-pill ${toolStatus === 'ready' ? 'tool-pill-ready' : ''}`}
           >
             <span className="tool-dot" />
-            {agentHost === 'bringmyai'
-              ? '13 tools + agent bridge'
-              : toolStatus === 'ready'
-                ? '13 site tools live'
-                : 'Site tools in Codex / ChatGPT'}
+            {toolStatus === 'ready'
+              ? '13 site tools live'
+              : 'WebMCP site tools ready'}
           </span>
           <span
             className="tool-pill hidden lg:inline-flex"
@@ -3394,7 +3381,7 @@ export function PitchArena() {
             <div className="queued-pitch-card-topline">
               <div>
                 <span>Pitch locked</span>
-                <strong>Waiting for Codex to enter the room</strong>
+                <strong>Waiting for your AI to enter the room</strong>
               </div>
               <i />
               <button
@@ -3663,10 +3650,8 @@ export function PitchArena() {
                       disabled={handoffStatus === 'requesting' || !roomReady}
                     >
                       {handoffStatus === 'requesting'
-                        ? 'Calling your agent…'
-                        : agentHost === 'bringmyai'
-                          ? 'Enter with my agent'
-                          : 'Enter room with Codex'}{' '}
+                        ? 'Preparing the room…'
+                        : 'Enter room with your AI'}{' '}
                       <ArrowUpRight data-icon="inline-end" />
                     </Button>
                     <div className="opening-handoff-note">

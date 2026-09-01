@@ -8,40 +8,10 @@ export type PitchAgentRequest = {
   difficulty: 'easy' | 'medium' | 'hard' | 'legendary';
 };
 
-export type AgentHandoffResult =
-  | { host: 'bringmyai'; status: 'requested' }
-  | { host: 'codex'; status: 'copied' };
-
-type BringMyAiRequest = {
-  appId: 'pitchtheai';
-  action: 'start_pitch';
-  message: string;
-  requestedTool: {
-    name: 'start_pitch';
-    arguments: {
-      founderName: string;
-      companyName: string;
-      askAmount: number;
-      equity: number;
-      openingPitch: string;
-      difficulty: 'easy' | 'medium' | 'hard' | 'legendary';
-    };
-  };
-  context: {
-    roomCode: string;
-    pitch: string;
-    url: string;
-    title: string;
-  };
+export type AgentHandoffResult = {
+  host: 'clipboard';
+  status: 'copied';
 };
-
-declare global {
-  interface Window {
-    bringMyAI?: {
-      requestAgentTurn?: (request: BringMyAiRequest) => Promise<unknown>;
-    };
-  }
-}
 
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
@@ -64,44 +34,9 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   ].join('\n\n');
 }
 
-export function hasBringMyAiAgentBridge() {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.bringMyAI?.requestAgentTurn === 'function'
-  );
-}
-
 export async function requestPitchAgent(
   request: PitchAgentRequest,
 ): Promise<AgentHandoffResult> {
-  const message = buildPitchAgentPrompt(request);
-  const bringMyAi = window.bringMyAI?.requestAgentTurn;
-  if (typeof bringMyAi === 'function') {
-    await bringMyAi({
-      appId: 'pitchtheai',
-      action: 'start_pitch',
-      message,
-      requestedTool: {
-        name: 'start_pitch',
-        arguments: {
-          founderName: request.founderName,
-          companyName: request.companyName,
-          askAmount: request.askAmount,
-          equity: request.equity,
-          openingPitch: request.pitch.trim(),
-          difficulty: request.difficulty,
-        },
-      },
-      context: {
-        roomCode: request.roomCode,
-        pitch: request.pitch.trim(),
-        url: window.location.href,
-        title: document.title,
-      },
-    });
-    return { host: 'bringmyai', status: 'requested' };
-  }
-
-  await navigator.clipboard.writeText(message);
-  return { host: 'codex', status: 'copied' };
+  await navigator.clipboard.writeText(buildPitchAgentPrompt(request));
+  return { host: 'clipboard', status: 'copied' };
 }
