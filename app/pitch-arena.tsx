@@ -1284,6 +1284,12 @@ export function PitchArena() {
     ? reactions[focusedJudgeId]
     : undefined;
   const founderFeed = feed.filter((entry) => entry.kind !== 'judge').slice(-6);
+  const pitchQueued =
+    pitch.status === 'lobby' && handoffStatus === 'waiting' && Boolean(draft.trim());
+  const queuedPitchParagraphs = draft
+    .trim()
+    .split(/\n\s*\n/)
+    .filter(Boolean);
 
   return (
     <main className="room-arena text-[#f6f2e9]">
@@ -1401,13 +1407,15 @@ export function PitchArena() {
             <p>
               <Sparkles className="size-3.5" />{' '}
               {pitch.status === 'lobby'
-                ? 'Live pitch arena'
+                ? pitchQueued
+                  ? `Pitch queued · ${pitch.founderName}`
+                  : 'Live pitch arena'
                 : pitch.status === 'final'
                   ? 'Final verdict'
                   : `Now pitching · ${pitch.founderName}`}
             </p>
             <h1>
-              {pitch.status === 'lobby' ? (
+              {pitch.status === 'lobby' && !pitchQueued ? (
                 <>
                   Make them lean in.<span>Before patience runs out.</span>
                 </>
@@ -1489,24 +1497,55 @@ export function PitchArena() {
           })}
         </div>
 
-        <button
-          className={`stage-microphone ${listening ? 'stage-microphone-live' : ''}`}
-          onClick={toggleListening}
-          aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
-        >
-          {/* The microphone is a local transparent stage prop; preserving its exact alpha edge is preferable here. */}
-          {/* oxlint-disable-next-line next/no-img-element */}
-          <img
-            src="/arena-microphone-v2.png"
-            alt=""
-            width={1024}
-            height={1536}
-          />
-          <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
-        </button>
+        {pitchQueued && (
+          <section className="queued-pitch-card" aria-live="polite">
+            <div className="queued-pitch-card-topline">
+              <div>
+                <span>Pitch locked</span>
+                <strong>Waiting for Codex to enter the room</strong>
+              </div>
+              <i />
+              <button
+                onClick={() => {
+                  setHandoffStatus('idle');
+                  setHandoffMessage('Edit your pitch, then send a fresh prompt.');
+                }}
+              >
+                Edit &amp; recopy
+              </button>
+            </div>
+            <div className="queued-pitch-copy">
+              {queuedPitchParagraphs.map((paragraph, index) => (
+                <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+              ))}
+            </div>
+            <footer>
+              <span className="queued-pulse" aria-hidden="true" />
+              {handoffMessage}
+            </footer>
+          </section>
+        )}
+
+        {!pitchQueued && (
+          <button
+            className={`stage-microphone ${listening ? 'stage-microphone-live' : ''}`}
+            onClick={toggleListening}
+            aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
+          >
+            {/* The microphone is a local transparent stage prop; preserving its exact alpha edge is preferable here. */}
+            {/* oxlint-disable-next-line next/no-img-element */}
+            <img
+              src="/arena-microphone-v2.png"
+              alt=""
+              width={1024}
+              height={1536}
+            />
+            <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
+          </button>
+        )}
 
         <div
-          className={`room-control-deck ${pitch.status === 'final' ? 'room-control-deck-final' : ''}`}
+          className={`room-control-deck ${pitch.status === 'final' ? 'room-control-deck-final' : ''} ${pitchQueued ? 'room-control-deck-queued' : ''}`}
         >
           <div className="room-metrics" aria-label="Pitch status">
             <div>

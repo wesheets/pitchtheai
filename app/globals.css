@@ -1863,6 +1863,117 @@ textarea {
   gap: 0.5rem;
   padding: 0.625rem;
 }
+.queued-pitch-card {
+  position: absolute;
+  z-index: 11;
+  top: clamp(245px, 27svh, 310px);
+  left: 50%;
+  width: min(1080px, calc(100% - 72px));
+  max-height: calc(100svh - clamp(275px, 31svh, 345px));
+  overflow: hidden;
+  border: 1px solid rgb(255 194 72 / 0.72);
+  border-radius: 20px;
+  padding: clamp(1rem, 1.8vw, 1.5rem);
+  color: rgb(255 255 255 / 0.82);
+  background:
+    radial-gradient(circle at 50% 0, rgb(255 188 54 / 0.09), transparent 42%),
+    linear-gradient(145deg, rgb(8 8 8 / 0.99), rgb(0 0 0 / 0.995));
+  box-shadow:
+    0 42px 110px #000,
+    0 0 0 1px rgb(255 213 126 / 0.07),
+    0 0 34px rgb(255 179 38 / 0.28),
+    inset 0 0 70px rgb(255 180 40 / 0.025);
+  transform: translateX(-50%);
+  animation: queued-card-arrive 0.55s cubic-bezier(0.2, 0.82, 0.18, 1) both;
+}
+.queued-pitch-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 24px rgb(255 190 61 / 0.1);
+  animation: queued-card-glow 2.1s ease-in-out infinite alternate;
+}
+.queued-pitch-card-topline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  padding-bottom: 0.75rem;
+}
+.queued-pitch-card-topline span,
+.queued-pitch-card-topline strong {
+  display: block;
+}
+.queued-pitch-card-topline span {
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+}
+.queued-pitch-card-topline strong {
+  margin-top: 0.15rem;
+  color: #fff;
+  font-size: clamp(15px, 1.25vw, 20px);
+  line-height: 1.1;
+}
+.queued-pitch-card-topline i {
+  height: 1px;
+  background: linear-gradient(90deg, rgb(255 190 65 / 0.42), transparent);
+}
+.queued-pitch-card-topline button {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  color: rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.035);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+.queued-pitch-card-topline button:hover {
+  color: #fff;
+  border-color: rgb(255 200 93 / 0.5);
+}
+.queued-pitch-copy {
+  columns: 2;
+  column-gap: clamp(1.4rem, 3vw, 3rem);
+  column-rule: 1px solid rgb(255 255 255 / 0.07);
+  margin-top: 0.85rem;
+  font-size: clamp(10px, 0.7vw, 12px);
+  line-height: 1.42;
+}
+.queued-pitch-copy p {
+  break-inside: avoid;
+  margin: 0 0 0.65rem;
+}
+.queued-pitch-card footer {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  margin-top: 0.25rem;
+  padding-top: 0.7rem;
+  color: rgb(255 255 255 / 0.42);
+  font: 700 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.queued-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffc857;
+  box-shadow: 0 0 12px #ffc857;
+  animation: queued-pulse 0.9s ease-in-out infinite alternate;
+}
+.room-control-deck-queued {
+  visibility: hidden;
+  pointer-events: none;
+}
 .room-pitch-console .opening-pitch-input {
   field-sizing: fixed;
   height: clamp(76px, 9svh, 104px);
@@ -2024,6 +2135,38 @@ textarea {
     opacity: 1;
     transform: translateY(0) scale(1);
     filter: blur(0);
+  }
+}
+@keyframes queued-card-arrive {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translate(-50%, 18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+@keyframes queued-card-glow {
+  from {
+    opacity: 0.45;
+    box-shadow: inset 0 0 18px rgb(255 190 61 / 0.06);
+  }
+  to {
+    opacity: 1;
+    box-shadow: inset 0 0 34px rgb(255 190 61 / 0.16);
+  }
+}
+@keyframes queued-pulse {
+  from {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.15);
   }
 }
 @keyframes judge-out-flash {
@@ -2662,6 +2805,25 @@ textarea {
   .room-control-deck {
     width: calc(100% - 20px);
     margin: 1rem auto;
+  }
+  .queued-pitch-card {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: calc(100% - 24px);
+    max-height: none;
+    margin: -1rem auto 1rem;
+    transform: none;
+    animation: none;
+  }
+  .queued-pitch-copy {
+    columns: 1;
+  }
+  .queued-pitch-card-topline {
+    grid-template-columns: 1fr auto;
+  }
+  .queued-pitch-card-topline i {
+    display: none;
   }
   .room-metrics {
     grid-template-columns: repeat(2, 1fr);
