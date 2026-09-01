@@ -43,6 +43,13 @@
       "when": 1788299709582,
       "tag": "0005_public_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788303345419,
+      "tag": "0006_bizarre_screwball",
+      "breakpoints": true
     }
   ]
 }

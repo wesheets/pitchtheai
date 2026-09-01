@@ -1,0 +1,1 @@
+ALTER TABLE `leaderboard` ADD `pause_seconds` integer DEFAULT 0 NOT NULL;

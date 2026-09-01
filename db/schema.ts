@@ -15,6 +15,7 @@ export const leaderboard = sqliteTable('leaderboard', {
   askAmount: integer('ask_amount').notNull().default(0),
   equity: real('equity').notNull().default(0),
   durationSeconds: integer('duration_seconds').notNull().default(0),
+  pauseSeconds: integer('pause_seconds').notNull().default(0),
   difficulty: text('difficulty').notNull().default('medium'),
   lifelinesUsed: integer('lifelines_used').notNull().default(0),
   openingPitch: text('opening_pitch').notNull().default(''),

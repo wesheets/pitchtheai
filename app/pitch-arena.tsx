@@ -21,11 +21,14 @@ import {
   MicOff,
   Music2,
   Paperclip,
+  Pause,
   PieChart,
+  Play,
   RotateCcw,
   Send,
   Share2,
   Sparkles,
+  TriangleAlert,
   Trophy,
   UserRound,
   Video,
@@ -105,6 +108,7 @@ export type LeaderboardEntry = {
   amountRaised: number;
   askAmount: number;
   durationSeconds: number;
+  pauseSeconds?: number;
   createdAt: number;
 };
 export type WebMcpToolCall = {
@@ -161,6 +165,12 @@ export type PresentationResetState = {
   requestedAt?: number;
   materialId?: string;
   usedAt?: number;
+};
+export type ArenaPauseState = {
+  status: 'available' | 'paused' | 'used';
+  totalPausedSeconds: number;
+  pausedAt?: number;
+  penalizedJudgeId?: JudgeId;
 };
 export type EvidenceReview = {
   materialId: string;
@@ -243,6 +253,37 @@ type QueuedPitchSession = {
   difficulty?: PitchDifficulty;
 };
 
+type ArenaRoomCheckpoint = {
+  version: 1;
+  roomCode: string;
+  savedAt: number;
+  pitch: PitchState;
+  reactions: Record<JudgeId, JudgeReaction>;
+  bids: Bid[];
+  offerDecision: OfferDecision;
+  acceptedBid: Bid | null;
+  draft: string;
+  composerOpen: boolean;
+  counteringJudgeId: JudgeId | null;
+  counterAmount: string;
+  counterEquity: string;
+  counterNote: string;
+  panelProfile: PanelProfile;
+  materials: PitchMaterial[];
+  evidenceReviews: Record<string, EvidenceReview>;
+  feed: PitchFeedEntry[];
+  founderTurn: FounderTurnState;
+  judgeRescue: JudgeRescueState;
+  judgeLifeline: JudgeLifelineState;
+  presentationReset: PresentationResetState;
+  pauseState: ArenaPauseState;
+  toolEvents: ArenaToolEvent[];
+  appealedJudgeIds: JudgeId[];
+  answerQuality: Record<AnswerQuality, number>;
+  publishFounderPhoto: boolean;
+  focusedJudgeId: JudgeId | null;
+};
+
 const JUDGES: Array<{
   id: JudgeId;
   name: string;
@@ -320,12 +361,12 @@ const DIFFICULTY_META: Record<
   hard: {
     label: 'Hard',
     responseSeconds: 60,
-    description: 'Sharper questions · stricter scoring',
+    description: 'Sharper questions · authenticity checks',
   },
   legendary: {
     label: 'Legendary',
     responseSeconds: 45,
-    description: 'No mercy · proof or perish',
+    description: 'No mercy · prove it is really your answer',
   },
 };
 
@@ -335,6 +376,7 @@ function responseWindow(difficulty: PitchDifficulty) {
 
 const ROOM_CODE_STORAGE_KEY = 'pitchtheai.room-code.v1';
 const QUEUED_PITCH_STORAGE_KEY = 'pitchtheai.queued-pitch.v1';
+const ROOM_CHECKPOINT_STORAGE_KEY = 'pitchtheai.room-checkpoint.v1';
 
 function createRoomCode() {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase();
@@ -415,6 +457,46 @@ function writeQueuedPitchSession(session: QueuedPitchSession) {
 function clearQueuedPitchSession() {
   try {
     window.sessionStorage.removeItem(QUEUED_PITCH_STORAGE_KEY);
+  } catch {
+    // Nothing else is required when browser storage is unavailable.
+  }
+}
+
+function readRoomCheckpoint(): ArenaRoomCheckpoint | null {
+  try {
+    const raw = window.sessionStorage.getItem(ROOM_CHECKPOINT_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<ArenaRoomCheckpoint>;
+    if (
+      value.version !== 1 ||
+      !validRoomCode(value.roomCode) ||
+      typeof value.savedAt !== 'number' ||
+      !value.pitch ||
+      (value.pitch.status !== 'live' && value.pitch.status !== 'final') ||
+      !value.reactions ||
+      !value.pauseState
+    )
+      return null;
+    return value as ArenaRoomCheckpoint;
+  } catch {
+    return null;
+  }
+}
+
+function writeRoomCheckpoint(checkpoint: ArenaRoomCheckpoint) {
+  try {
+    window.sessionStorage.setItem(
+      ROOM_CHECKPOINT_STORAGE_KEY,
+      JSON.stringify(checkpoint),
+    );
+  } catch {
+    // The room remains playable when private storage is unavailable.
+  }
+}
+
+function clearRoomCheckpoint() {
+  try {
+    window.sessionStorage.removeItem(ROOM_CHECKPOINT_STORAGE_KEY);
   } catch {
     // Nothing else is required when browser storage is unavailable.
   }
@@ -592,6 +674,12 @@ export function PitchArena() {
   });
   const [presentationReset, setPresentationReset] =
     useState<PresentationResetState>({ status: 'idle' });
+  const [pauseState, setPauseState] = useState<ArenaPauseState>({
+    status: 'available',
+    totalPausedSeconds: 0,
+  });
+  const [pauseWarningOpen, setPauseWarningOpen] = useState(false);
+  const [pauseDisplaySeconds, setPauseDisplaySeconds] = useState(0);
   const [responseSecondsLeft, setResponseSecondsLeft] = useState(45);
   const [musicLevel, setMusicLevel] = useState(0.42);
   const [uploading, setUploading] = useState(false);
@@ -630,6 +718,7 @@ export function PitchArena() {
   const judgeRescueRef = useRef(judgeRescue);
   const judgeLifelineRef = useRef(judgeLifeline);
   const presentationResetRef = useRef(presentationReset);
+  const pauseStateRef = useRef(pauseState);
   const appealedJudgeIdsRef = useRef<Set<JudgeId>>(new Set());
   const answerQualityRef = useRef<Record<AnswerQuality, number>>({
     ...EMPTY_ANSWER_QUALITY,
@@ -678,8 +767,10 @@ export function PitchArena() {
   useEffect(() => {
     const hydrateRoom = window.setTimeout(() => {
       const queued = readQueuedPitchSession();
+      const checkpoint = readRoomCheckpoint();
       const storedRoomCode = readRoomCode();
-      const restoredRoomCode = queued?.roomCode ?? storedRoomCode;
+      const restoredRoomCode =
+        checkpoint?.roomCode ?? queued?.roomCode ?? storedRoomCode;
       const nextRoomCode = validRoomCode(restoredRoomCode)
         ? restoredRoomCode
         : createRoomCode();
@@ -688,7 +779,85 @@ export function PitchArena() {
       syncRoomAddress(nextRoomCode);
       setRoomCode(nextRoomCode);
 
-      if (queued && queued.roomCode === nextRoomCode) {
+      if (checkpoint && checkpoint.roomCode === nextRoomCode) {
+        const checkpointWasPaused = checkpoint.pauseState.status === 'paused';
+        const photoResetPaused =
+          checkpoint.presentationReset.status === 'awaiting' ||
+          checkpoint.presentationReset.status === 'captured';
+        const elapsedSeconds = Math.max(
+          0,
+          Math.floor((Date.now() - checkpoint.savedAt) / 1000),
+        );
+        const restoredPitch: PitchState = {
+          ...checkpoint.pitch,
+          secondsLeft:
+            checkpoint.pitch.status === 'live' &&
+            !checkpointWasPaused &&
+            !photoResetPaused
+              ? Math.max(0, checkpoint.pitch.secondsLeft - elapsedSeconds)
+              : checkpoint.pitch.secondsLeft,
+        };
+        pitchRef.current = restoredPitch;
+        reactionsRef.current = checkpoint.reactions;
+        bidsRef.current = checkpoint.bids;
+        offerDecisionRef.current = checkpoint.offerDecision;
+        acceptedBidRef.current = checkpoint.acceptedBid;
+        draftRef.current = checkpoint.draft;
+        panelProfileRef.current = checkpoint.panelProfile;
+        materialsRef.current = checkpoint.materials;
+        evidenceReviewsRef.current = checkpoint.evidenceReviews;
+        feedRef.current = checkpoint.feed;
+        founderTurnRef.current = checkpoint.founderTurn;
+        judgeRescueRef.current = checkpoint.judgeRescue;
+        judgeLifelineRef.current = checkpoint.judgeLifeline;
+        presentationResetRef.current = checkpoint.presentationReset;
+        pauseStateRef.current = checkpoint.pauseState;
+        toolEventsRef.current = checkpoint.toolEvents;
+        appealedJudgeIdsRef.current = new Set(checkpoint.appealedJudgeIds);
+        answerQualityRef.current = checkpoint.answerQuality;
+        publishFounderPhotoRef.current = checkpoint.publishFounderPhoto;
+        setPitch(restoredPitch);
+        setReactions(checkpoint.reactions);
+        setBids(checkpoint.bids);
+        setOfferDecision(checkpoint.offerDecision);
+        setAcceptedBid(checkpoint.acceptedBid);
+        setDraft(checkpoint.draft);
+        setComposerOpen(checkpoint.composerOpen);
+        setCounteringJudgeId(checkpoint.counteringJudgeId);
+        setCounterAmount(checkpoint.counterAmount);
+        setCounterEquity(checkpoint.counterEquity);
+        setCounterNote(checkpoint.counterNote);
+        setPanelProfile(checkpoint.panelProfile);
+        setMaterials(checkpoint.materials);
+        setEvidenceReviews(checkpoint.evidenceReviews);
+        setFeed(checkpoint.feed);
+        setFounderTurn(checkpoint.founderTurn);
+        setJudgeRescue(checkpoint.judgeRescue);
+        setJudgeLifeline(checkpoint.judgeLifeline);
+        setPresentationReset(checkpoint.presentationReset);
+        setPauseState(checkpoint.pauseState);
+        setPauseDisplaySeconds(
+          checkpoint.pauseState.totalPausedSeconds +
+            (checkpoint.pauseState.status === 'paused' &&
+            checkpoint.pauseState.pausedAt
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    (Date.now() - checkpoint.pauseState.pausedAt) / 1000,
+                  ),
+                )
+              : 0),
+        );
+        setToolEvents(checkpoint.toolEvents);
+        setPublishFounderPhoto(checkpoint.publishFounderPhoto);
+        setFocusedJudgeId(checkpoint.focusedJudgeId);
+        setHandoffStatus('connected');
+        setHandoffMessage(
+          checkpointWasPaused
+            ? 'Room restored in its paused state. Resume when you are ready.'
+            : 'Room restored after refresh. The live pitch continued while you were away.',
+        );
+      } else if (queued && queued.roomCode === nextRoomCode) {
         const restoredPitch: PitchState = {
           ...DEFAULT_PITCH,
           founderName: queued.founderName,
@@ -756,6 +925,9 @@ export function PitchArena() {
     presentationResetRef.current = presentationReset;
   }, [presentationReset]);
   useEffect(() => {
+    pauseStateRef.current = pauseState;
+  }, [pauseState]);
+  useEffect(() => {
     panelProfileRef.current = panelProfile;
   }, [panelProfile]);
   useEffect(() => {
@@ -764,6 +936,74 @@ export function PitchArena() {
   useEffect(() => {
     voiceProviderRef.current = voiceProvider;
   }, [voiceProvider]);
+
+  useEffect(() => {
+    if (
+      !roomReady ||
+      !validRoomCode(roomCode) ||
+      (pitch.status !== 'live' && pitch.status !== 'final')
+    )
+      return;
+    const timer = window.setTimeout(() => {
+      writeRoomCheckpoint({
+        version: 1,
+        roomCode,
+        savedAt: Date.now(),
+        pitch,
+        reactions,
+        bids,
+        offerDecision,
+        acceptedBid,
+        draft,
+        composerOpen,
+        counteringJudgeId,
+        counterAmount,
+        counterEquity,
+        counterNote,
+        panelProfile,
+        materials,
+        evidenceReviews,
+        feed,
+        founderTurn,
+        judgeRescue,
+        judgeLifeline,
+        presentationReset,
+        pauseState,
+        toolEvents,
+        appealedJudgeIds: [...appealedJudgeIdsRef.current],
+        answerQuality: answerQualityRef.current,
+        publishFounderPhoto,
+        focusedJudgeId,
+      });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [
+    acceptedBid,
+    bids,
+    composerOpen,
+    counterAmount,
+    counterEquity,
+    counterNote,
+    counteringJudgeId,
+    draft,
+    evidenceReviews,
+    feed,
+    focusedJudgeId,
+    founderTurn,
+    judgeLifeline,
+    judgeRescue,
+    materials,
+    offerDecision,
+    panelProfile,
+    pauseState,
+    pitch,
+    presentationReset,
+    publishFounderPhoto,
+    reactions,
+    roomCode,
+    roomReady,
+    toolEvents,
+  ]);
   useEffect(() => {
     let active = true;
     void getVoiceProvider().then((provider) => {
@@ -827,6 +1067,7 @@ export function PitchArena() {
     launchCount !== null ? 'cinematic' : pitch.soundtrack;
   const heartbeatActive =
     pitch.status === 'live' &&
+    pauseState.status !== 'paused' &&
     (founderTurn.status === 'awaiting' || pitch.secondsLeft <= 120);
 
   useEffect(() => {
@@ -888,6 +1129,100 @@ export function PitchArena() {
     },
     [],
   );
+
+  const confirmArenaPause = useCallback(() => {
+    if (
+      pitchRef.current.status !== 'live' ||
+      pauseStateRef.current.status !== 'available' ||
+      presentationResetRef.current.status === 'awaiting' ||
+      presentationResetRef.current.status === 'captured'
+    )
+      return;
+    const active = Object.values(reactionsRef.current)
+      .filter((reaction) => reaction.state !== 'out')
+      .sort((left, right) => left.interest - right.interest);
+    if (active.length <= 1) return;
+    const protectedJudgeId = founderTurnRef.current.judgeId;
+    const departing =
+      active.find((reaction) => reaction.judgeId !== protectedJudgeId) ??
+      active[0];
+    const judge = JUDGES.find((item) => item.id === departing.judgeId)!;
+    const nextReactions: Record<JudgeId, JudgeReaction> = {
+      ...reactionsRef.current,
+      [departing.judgeId]: {
+        ...departing,
+        state: 'out',
+        mood: 'skeptical',
+        reactionStyle: 'exasperated',
+        spoken: `You paused the room. I do not wait on founders. I am out.`,
+        outReason: 'The founder used the one-time room pause.',
+      },
+    };
+    const nextPause: ArenaPauseState = {
+      status: 'paused',
+      totalPausedSeconds: pauseStateRef.current.totalPausedSeconds,
+      pausedAt: Date.now(),
+      penalizedJudgeId: departing.judgeId,
+    };
+    reactionsRef.current = nextReactions;
+    pauseStateRef.current = nextPause;
+    setReactions(nextReactions);
+    setPauseState(nextPause);
+    setPauseDisplaySeconds(nextPause.totalPausedSeconds);
+    setPauseWarningOpen(false);
+    setFocusedJudgeId(null);
+    setComposerOpen(false);
+    stopVoices();
+    appendFeed({
+      kind: 'system',
+      author: 'Arena pause',
+      text: `${judge.name} left when the founder paused the room. Pause time will appear on the public pitch receipt.`,
+    });
+  }, [appendFeed, stopVoices]);
+
+  const resumeArena = useCallback(() => {
+    const current = pauseStateRef.current;
+    if (current.status !== 'paused' || !current.pausedAt) return;
+    const pausedMilliseconds = Math.max(0, Date.now() - current.pausedAt);
+    const pausedSeconds = Math.max(1, Math.round(pausedMilliseconds / 1000));
+    const nextPause: ArenaPauseState = {
+      status: 'used',
+      totalPausedSeconds: current.totalPausedSeconds + pausedSeconds,
+      penalizedJudgeId: current.penalizedJudgeId,
+    };
+    const shiftedFounderTurn = founderTurnRef.current.deadline
+      ? {
+          ...founderTurnRef.current,
+          deadline: founderTurnRef.current.deadline + pausedMilliseconds,
+        }
+      : founderTurnRef.current;
+    const shiftedRescue = judgeRescueRef.current.deadline
+      ? {
+          ...judgeRescueRef.current,
+          deadline: judgeRescueRef.current.deadline + pausedMilliseconds,
+        }
+      : judgeRescueRef.current;
+    const shiftedOffer = offerDecisionRef.current.deadline
+      ? {
+          ...offerDecisionRef.current,
+          deadline: offerDecisionRef.current.deadline + pausedMilliseconds,
+        }
+      : offerDecisionRef.current;
+    pauseStateRef.current = nextPause;
+    founderTurnRef.current = shiftedFounderTurn;
+    judgeRescueRef.current = shiftedRescue;
+    offerDecisionRef.current = shiftedOffer;
+    setPauseState(nextPause);
+    setPauseDisplaySeconds(nextPause.totalPausedSeconds);
+    setFounderTurn(shiftedFounderTurn);
+    setJudgeRescue(shiftedRescue);
+    setOfferDecision(shiftedOffer);
+    appendFeed({
+      kind: 'system',
+      author: 'Arena pause',
+      text: `The room resumed after ${formatClock(nextPause.totalPausedSeconds)} paused. The pause is now part of the permanent pitch receipt.`,
+    });
+  }, [appendFeed]);
 
   const speak = useCallback(
     (lines: Array<{ judgeId: JudgeId; text: string }>) => {
@@ -972,6 +1307,7 @@ export function PitchArena() {
   const startPitch = useCallback(
     async (next?: Partial<PitchState>) => {
       clearQueuedPitchSession();
+      clearRoomCheckpoint();
       const launchToken = launchTokenRef.current + 1;
       launchTokenRef.current = launchToken;
       if (responseWaiterRef.current) {
@@ -1032,6 +1368,14 @@ export function PitchArena() {
       setJudgeLifeline({ status: 'available' });
       presentationResetRef.current = { status: 'idle' };
       setPresentationReset({ status: 'idle' });
+      const freshPauseState: ArenaPauseState = {
+        status: 'available',
+        totalPausedSeconds: 0,
+      };
+      pauseStateRef.current = freshPauseState;
+      setPauseState(freshPauseState);
+      setPauseWarningOpen(false);
+      setPauseDisplaySeconds(0);
       appealedJudgeIdsRef.current.clear();
       setResponseSecondsLeft(responseWindow(nextPitch.difficulty));
       twoMinuteWarningRef.current = false;
@@ -1132,6 +1476,7 @@ export function PitchArena() {
   }, []);
   const resetPitch = useCallback(() => {
     clearQueuedPitchSession();
+    clearRoomCheckpoint();
     launchTokenRef.current += 1;
     setLaunchCount(null);
     setPitch(DEFAULT_PITCH);
@@ -1159,6 +1504,14 @@ export function PitchArena() {
     setJudgeLifeline({ status: 'available' });
     presentationResetRef.current = { status: 'idle' };
     setPresentationReset({ status: 'idle' });
+    const freshPauseState: ArenaPauseState = {
+      status: 'available',
+      totalPausedSeconds: 0,
+    };
+    pauseStateRef.current = freshPauseState;
+    setPauseState(freshPauseState);
+    setPauseWarningOpen(false);
+    setPauseDisplaySeconds(0);
     appealedJudgeIdsRef.current.clear();
     setEvidenceReviews({});
     answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
@@ -1445,6 +1798,7 @@ export function PitchArena() {
         resolve(result);
       };
       const check = () => {
+        if (pauseStateRef.current.status === 'paused') return;
         const latest = judgeRescueRef.current;
         if (latest.status === 'answered') {
           finish({
@@ -1628,6 +1982,7 @@ export function PitchArena() {
           resolve(result);
         };
         function check() {
+          if (pauseStateRef.current.status === 'paused') return;
           const latest = founderTurnRef.current;
           if (latest.status === 'answered') {
             finish({
@@ -1750,6 +2105,14 @@ export function PitchArena() {
       );
       return new Promise<Record<string, unknown>>((resolve) => {
         const timer = window.setTimeout(() => {
+          if (pauseStateRef.current.status === 'paused') {
+            offerWaiterRef.current = null;
+            resolve({
+              status: 'paused',
+              next: 'Wait for the founder to resume the room, then call wait_for_founder_offer_decision again.',
+            });
+            return;
+          }
           const latest = offerDecisionRef.current;
           const latestDeadline = latest.deadline ?? deadline;
           if (latest.status === 'answered') {
@@ -2013,6 +2376,15 @@ export function PitchArena() {
       else if (credibleTotal === 0 && evasiveTotal >= 3) scoreCap = 15;
       else if (evasiveTotal >= 3) scoreCap = Math.min(scoreCap, 24);
       else if (evasiveTotal >= 2) scoreCap = Math.min(scoreCap, 35);
+      const pauseSnapshot = pauseStateRef.current;
+      const pauseSeconds =
+        pauseSnapshot.totalPausedSeconds +
+        (pauseSnapshot.status === 'paused' && pauseSnapshot.pausedAt
+          ? Math.max(
+              0,
+              Math.round((Date.now() - pauseSnapshot.pausedAt) / 1000),
+            )
+          : 0);
       const finalPitch = {
         ...snapshot,
         status: 'final' as const,
@@ -2021,7 +2393,8 @@ export function PitchArena() {
         amountRaised: Math.max(0, Math.round(result.amountRaised)),
         durationSeconds: Math.max(
           0,
-          Math.round((Date.now() - (snapshot.startedAt ?? Date.now())) / 1000),
+          Math.round((Date.now() - (snapshot.startedAt ?? Date.now())) / 1000) -
+            pauseSeconds,
         ),
       };
       setPitch(finalPitch);
@@ -2046,6 +2419,7 @@ export function PitchArena() {
             askAmount: finalPitch.askAmount,
             equity: finalPitch.equity,
             durationSeconds: finalPitch.durationSeconds,
+            pauseSeconds,
             difficulty: finalPitch.difficulty,
             lifelinesUsed: judgeLifelineRef.current.usedAt ? 1 : 0,
             openingPitch: finalPitch.openingPitch,
@@ -2094,6 +2468,7 @@ export function PitchArena() {
         judgeRescue: judgeRescueRef.current,
         judgeLifeline: judgeLifelineRef.current,
         presentationReset: presentationResetRef.current,
+        pauseState: pauseStateRef.current,
         evidenceReview: {
           pendingMaterialIds: materialsRef.current
             .filter((material) => !evidenceReviewsRef.current[material.id])
@@ -2148,6 +2523,7 @@ export function PitchArena() {
   useEffect(() => {
     if (
       pitch.status !== 'live' ||
+      pauseState.status === 'paused' ||
       presentationReset.status === 'awaiting' ||
       presentationReset.status === 'captured'
     )
@@ -2160,7 +2536,18 @@ export function PitchArena() {
       );
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [pitch.status, presentationReset.status]);
+  }, [pauseState.status, pitch.status, presentationReset.status]);
+
+  useEffect(() => {
+    if (pauseState.status !== 'paused' || !pauseState.pausedAt) return;
+    const tick = () =>
+      setPauseDisplaySeconds(
+        pauseState.totalPausedSeconds +
+          Math.max(0, Math.floor((Date.now() - pauseState.pausedAt!) / 1000)),
+      );
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [pauseState]);
 
   useEffect(() => {
     if (pitch.status !== 'live') {
@@ -2178,6 +2565,7 @@ export function PitchArena() {
   }, [appendFeed, pitch.secondsLeft, pitch.status]);
 
   useEffect(() => {
+    if (pauseState.status === 'paused') return;
     if (founderTurn.status !== 'awaiting' || !founderTurn.deadline) return;
     const tick = () => {
       setResponseSecondsLeft(
@@ -2187,9 +2575,10 @@ export function PitchArena() {
     tick();
     const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
-  }, [founderTurn]);
+  }, [founderTurn, pauseState.status]);
 
   useEffect(() => {
+    if (pauseState.status === 'paused') return;
     if (offerDecision.status !== 'choosing' || !offerDecision.deadline) return;
     const tick = () => {
       setResponseSecondsLeft(
@@ -2199,7 +2588,7 @@ export function PitchArena() {
     tick();
     const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
-  }, [offerDecision]);
+  }, [offerDecision, pauseState.status]);
 
   const submitFounderResponse = useCallback(
     (response: string) => {
@@ -3194,29 +3583,31 @@ export function PitchArena() {
     ) : null;
 
   const flowStatus =
-    presentationReset.status === 'awaiting'
-      ? 'Presentation reset · clock paused for a new photo'
-      : presentationReset.status === 'captured'
-        ? 'New photo sent · judge reviewing'
-        : presentationReset.status === 'reviewed'
-          ? 'Retake reviewed · same judge has the floor'
-          : judgeLifeline.status === 'pending'
-            ? 'Second Chance active · recalled judge has the floor'
-            : judgeRescue.status === 'offered'
-              ? 'Judge leaving · appeal window open'
-              : judgeRescue.status === 'awaiting'
-                ? 'Twenty-second rescue · founder answering'
-                : founderTurn.status === 'presenting'
-                  ? 'Judge speaking · click Respond when ready'
-                  : founderTurn.status === 'awaiting'
-                    ? 'Waiting for your answer'
-                    : founderTurn.status === 'answered'
-                      ? 'Answer received · agent evaluating'
-                      : speakingJudge
-                        ? 'Judge speaking'
-                        : pitch.status === 'live'
-                          ? 'Room listening'
-                          : 'Room ready';
+    pauseState.status === 'paused'
+      ? `Founder pause · ${formatClock(pauseDisplaySeconds)} recorded`
+      : presentationReset.status === 'awaiting'
+        ? 'Presentation reset · clock paused for a new photo'
+        : presentationReset.status === 'captured'
+          ? 'New photo sent · judge reviewing'
+          : presentationReset.status === 'reviewed'
+            ? 'Retake reviewed · same judge has the floor'
+            : judgeLifeline.status === 'pending'
+              ? 'Second Chance active · recalled judge has the floor'
+              : judgeRescue.status === 'offered'
+                ? 'Judge leaving · appeal window open'
+                : judgeRescue.status === 'awaiting'
+                  ? 'Twenty-second rescue · founder answering'
+                  : founderTurn.status === 'presenting'
+                    ? 'Judge speaking · click Respond when ready'
+                    : founderTurn.status === 'awaiting'
+                      ? 'Waiting for your answer'
+                      : founderTurn.status === 'answered'
+                        ? 'Answer received · agent evaluating'
+                        : speakingJudge
+                          ? 'Judge speaking'
+                          : pitch.status === 'live'
+                            ? 'Room listening'
+                            : 'Room ready';
 
   const utilityOverlay = utilityPanel ? (
     <dialog
@@ -3343,11 +3734,58 @@ export function PitchArena() {
       </dialog>
     ) : null;
 
+  const pauseWarningOverlay = pauseWarningOpen ? (
+    <dialog
+      open
+      className="arena-pause-panel arena-pause-warning"
+      aria-labelledby="arena-pause-warning-title"
+    >
+      <TriangleAlert />
+      <span>One-time founder pause</span>
+      <h2 id="arena-pause-warning-title">Pausing costs an investor.</h2>
+      <p>
+        The least-interested active investor leaves immediately. The room clock
+        stops, but every second you stay paused will be published on your
+        leaderboard result.
+      </p>
+      <div>
+        <Button variant="outline" onClick={() => setPauseWarningOpen(false)}>
+          Stay live
+        </Button>
+        <Button onClick={confirmArenaPause}>
+          Lose an investor & pause <Pause data-icon="inline-end" />
+        </Button>
+      </div>
+    </dialog>
+  ) : null;
+
+  const pausedRoomOverlay =
+    pauseState.status === 'paused' ? (
+      <dialog
+        open
+        className="arena-pause-panel arena-paused-room"
+        aria-labelledby="arena-paused-title"
+      >
+        <Pause />
+        <span>Room paused · public receipt running</span>
+        <h2 id="arena-paused-title">{formatClock(pauseDisplaySeconds)}</h2>
+        <p>
+          The pitch clock and active answer gates are frozen. Refreshing this
+          tab will return to this exact paused room.
+        </p>
+        <Button onClick={resumeArena}>
+          Resume the pitch <Play data-icon="inline-end" />
+        </Button>
+      </dialog>
+    ) : null;
+
   const arenaModalOpen = Boolean(
     composerOpen ||
-      pitch.status === 'final' ||
-      utilityPanel ||
-      judgeLifeline.status === 'selecting',
+    pitch.status === 'final' ||
+    utilityPanel ||
+    judgeLifeline.status === 'selecting' ||
+    pauseWarningOpen ||
+    pauseState.status === 'paused',
   );
 
   return (
@@ -3555,6 +3993,8 @@ export function PitchArena() {
         {founderComposerOverlay}
         {utilityOverlay}
         {lifelineOverlay}
+        {pauseWarningOverlay}
+        {pausedRoomOverlay}
         <div className="judge-monitor-grid">
           <div className="room-title">
             <p>
@@ -3580,20 +4020,24 @@ export function PitchArena() {
               )}
             </h1>
             <div
-              className={`room-clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''} ${presentationReset.status === 'awaiting' || presentationReset.status === 'captured' ? 'clock-paused' : ''}`}
+              className={`room-clock ${pitch.secondsLeft < 90 ? 'clock-danger' : ''} ${pauseState.status === 'paused' || presentationReset.status === 'awaiting' || presentationReset.status === 'captured' ? 'clock-paused' : ''}`}
             >
               <Clock3 className="size-4" />
               <strong>
-                {presentationReset.status === 'awaiting' ||
-                presentationReset.status === 'captured'
+                {pauseState.status === 'paused'
                   ? 'PAUSED'
-                  : formatClock(pitch.secondsLeft)}
+                  : presentationReset.status === 'awaiting' ||
+                      presentationReset.status === 'captured'
+                    ? 'PAUSED'
+                    : formatClock(pitch.secondsLeft)}
               </strong>
               <small>
-                {presentationReset.status === 'awaiting' ||
-                presentationReset.status === 'captured'
-                  ? 'Photo reset'
-                  : 'Time remaining'}
+                {pauseState.status === 'paused'
+                  ? formatClock(pauseDisplaySeconds)
+                  : presentationReset.status === 'awaiting' ||
+                      presentationReset.status === 'captured'
+                    ? 'Photo reset'
+                    : 'Time remaining'}
               </small>
             </div>
             {pitch.status !== 'lobby' && (
@@ -3973,7 +4417,14 @@ export function PitchArena() {
                           ? `Deal with ${acceptedJudge?.name ?? acceptedBid.judgeId}: ${money(acceptedBid.amount)} for ${acceptedBid.equity}%`
                           : `Raised ${money(pitch.amountRaised ?? 0)}`}
                       </b>
-                      <span>{formatClock(pitch.durationSeconds ?? 0)}</span>
+                      <span>
+                        Active {formatClock(pitch.durationSeconds ?? 0)}
+                      </span>
+                      {pauseState.totalPausedSeconds > 0 && (
+                        <span>
+                          Paused {formatClock(pauseState.totalPausedSeconds)}
+                        </span>
+                      )}
                     </div>
                     {finalToolCalls.length > 0 && (
                       <section className="arena-final-tools">
@@ -4241,6 +4692,43 @@ export function PitchArena() {
               <button className="caption-toggle" onClick={resetPitch}>
                 <RotateCcw className="size-3.5" /> Reset room
               </button>
+              {pitch.status === 'live' && (
+                <button
+                  className={`caption-toggle arena-pause-button ${pauseState.status !== 'available' ? 'arena-pause-used' : ''}`}
+                  onClick={() => {
+                    if (pauseState.status === 'paused') resumeArena();
+                    else if (pauseState.status === 'available')
+                      setPauseWarningOpen(true);
+                  }}
+                  disabled={
+                    pauseState.status === 'used' ||
+                    activeJudges <= 1 ||
+                    presentationReset.status === 'awaiting' ||
+                    presentationReset.status === 'captured'
+                  }
+                  title={
+                    presentationReset.status === 'awaiting' ||
+                    presentationReset.status === 'captured'
+                      ? 'The room is already paused for a founder photo reset'
+                      : pauseState.status === 'used'
+                        ? `Pause used for ${formatClock(pauseState.totalPausedSeconds)}`
+                        : activeJudges <= 1
+                          ? 'At least two investors must remain to use the pause'
+                          : 'Pause once; one investor leaves and the time is published'
+                  }
+                >
+                  {pauseState.status === 'paused' ? (
+                    <Play className="size-3.5" />
+                  ) : (
+                    <Pause className="size-3.5" />
+                  )}
+                  {pauseState.status === 'available'
+                    ? 'Pause room'
+                    : pauseState.status === 'paused'
+                      ? 'Resume room'
+                      : `Paused ${formatClock(pauseState.totalPausedSeconds)}`}
+                </button>
+              )}
               {pitch.status === 'live' && (
                 <button
                   className={`caption-toggle live-lifeline-button ${judgeLifeline.status === 'pending' ? 'lifeline-pending' : ''}`}

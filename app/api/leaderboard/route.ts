@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       askAmount: Number(body.askAmount),
       equity: Number(body.equity),
       durationSeconds: Number(body.durationSeconds) || 0,
+      pauseSeconds: Number(body.pauseSeconds) || 0,
       difficulty:
         typeof body.difficulty === 'string' ? body.difficulty : 'medium',
       lifelinesUsed: Number(body.lifelinesUsed ?? 0),

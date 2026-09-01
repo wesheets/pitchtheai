@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9881d4ec-fe9f-4971-9762-3819974c4520",
-  "prevId": "7d77f51b-2c28-4146-b2b9-01f28375917b",
+  "id": "e7c27ddc-f176-4631-a022-413baa0feb70",
+  "prevId": "2c6858fa-e6cd-4e08-ab83-9d49b29dcdef",
   "tables": {
     "leaderboard": {
       "name": "leaderboard",
@@ -28,6 +28,22 @@
           "notNull": true,
           "autoincrement": false
         },
+        "agent_signature": {
+          "name": "agent_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Unspecified WebMCP agent'"
+        },
+        "pitch_venue": {
+          "name": "pitch_venue",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Attached WebMCP browser'"
+        },
         "score": {
           "name": "score",
           "type": "integer",
@@ -50,6 +66,85 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "equity": {
+          "name": "equity",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "duration_seconds": {
+          "name": "duration_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "pause_seconds": {
+          "name": "pause_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "difficulty": {
+          "name": "difficulty",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'medium'"
+        },
+        "lifelines_used": {
+          "name": "lifelines_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "opening_pitch": {
+          "name": "opening_pitch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "transcript": {
+          "name": "transcript",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "verdict_summary": {
+          "name": "verdict_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "tool_calls": {
+          "name": "tool_calls",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "founder_photo_material_id": {
+          "name": "founder_photo_material_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

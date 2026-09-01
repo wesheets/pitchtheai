@@ -9,6 +9,7 @@ import {
   Gauge,
   LifeBuoy,
   MapPin,
+  Pause,
   Trophy,
 } from 'lucide-react';
 
@@ -142,6 +143,9 @@ export default async function LeaderboardPage() {
                     <th>
                       <Clock3 className="size-3.5" /> Duration
                     </th>
+                    <th>
+                      <Pause className="size-3.5" /> Pause
+                    </th>
                     <th>Date</th>
                     <th>Replay</th>
                   </tr>
@@ -211,6 +215,15 @@ export default async function LeaderboardPage() {
                       </td>
                       <td>{money(entry.askAmount)}</td>
                       <td>{duration(entry.durationSeconds)}</td>
+                      <td>
+                        <span
+                          className={`leaderboard-lifeline ${entry.pauseSeconds ? 'used' : ''}`}
+                        >
+                          {entry.pauseSeconds
+                            ? duration(entry.pauseSeconds)
+                            : 'Not used'}
+                        </span>
+                      </td>
                       <td>
                         {new Intl.DateTimeFormat('en-US', {
                           month: 'short',

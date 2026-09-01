@@ -2236,6 +2236,81 @@ textarea {
   font-size: 10px;
   text-align: center;
 }
+.arena-pause-panel {
+  position: fixed;
+  z-index: 78;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  width: min(620px, calc(100vw - 40px));
+  margin: 0;
+  border: 1px solid rgb(255 195 77 / 0.68);
+  border-radius: 24px;
+  padding: clamp(1.4rem, 3vw, 2.5rem);
+  color: #fff;
+  background:
+    radial-gradient(circle at 50% 0, rgb(255 194 76 / 0.16), transparent 42%),
+    linear-gradient(145deg, rgb(14 12 8 / 0.995), rgb(2 4 7 / 0.995));
+  box-shadow:
+    0 44px 150px #000,
+    0 0 70px rgb(255 185 50 / 0.2),
+    inset 0 0 80px #000;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: founder-composer-in 0.3s cubic-bezier(0.2, 0.84, 0.23, 1) both;
+}
+.arena-pause-panel > svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 0.8rem;
+  color: #ffc857;
+  filter: drop-shadow(0 0 22px rgb(255 190 70 / 0.38));
+}
+.arena-pause-panel > span {
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+}
+.arena-pause-panel h2 {
+  margin-top: 0.3rem;
+  color: #fff;
+  font: 900 clamp(34px, 4.2vw, 58px) / 0.94 var(--font-geist-sans);
+  letter-spacing: -0.055em;
+}
+.arena-pause-panel p {
+  max-width: 50ch;
+  margin-top: 0.85rem;
+  color: rgb(255 255 255 / 0.64);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.arena-pause-panel > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1.2rem;
+}
+.arena-paused-room h2 {
+  color: #ffc857;
+  font-family: var(--font-geist-mono);
+  font-size: clamp(64px, 9vw, 112px);
+  letter-spacing: -0.08em;
+  text-shadow: 0 0 42px rgb(255 185 50 / 0.32);
+}
+.arena-pause-button {
+  border-color: rgb(255 195 77 / 0.25) !important;
+  color: #ffc857 !important;
+}
+.arena-pause-button:hover:not(:disabled) {
+  border-color: rgb(255 195 77 / 0.62) !important;
+  background: rgb(255 195 77 / 0.09) !important;
+}
+.arena-pause-used {
+  color: rgb(255 255 255 / 0.38) !important;
+}
 .arena-tool-events {
   display: grid;
   max-height: 56svh;
@@ -3570,7 +3645,7 @@ textarea {
 }
 .pitch-record-stats {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   margin-top: 2rem;
   overflow: hidden;
   border: 1px solid rgb(255 199 87 / 0.25);
@@ -3799,7 +3874,7 @@ textarea {
   .pitch-record-stats > div:nth-child(even) {
     border-right: 0;
   }
-  .pitch-record-stats > div:nth-child(-n + 4) {
+  .pitch-record-stats > div:nth-child(-n + 6) {
     border-bottom: 1px solid rgb(255 255 255 / 0.08);
   }
   .pitch-agent-signature {

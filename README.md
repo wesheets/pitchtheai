@@ -10,11 +10,12 @@ Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchth
 2. Write or dictate the opening pitch, optionally attach evidence, and take an opt-in founder photo.
 3. Copy the generated panel prompt into a WebMCP-capable browser agent. The arena verifies the room code, runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session.
 4. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
-5. The founder clicks **Respond**, then has 45 seconds to answer by voice or text. The countdown grows and pulses while a heartbeat replaces the room music.
+5. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
 6. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.
-7. Judges can laugh, become exasperated, demand a presentation reset, or leave with a specific reason. A one-use **Wait, don’t go!** lifeline gives the founder ten seconds to rescue an eliminated judge.
+7. Judges can laugh, become exasperated, demand a presentation reset, or leave with a specific reason. A one-use **Wait, don’t go!** lifeline gives the founder twenty seconds to rescue an eliminated judge.
 8. Interested judges can make visible bids and compete. The founder—not the agent—accepts, counters, or rejects each offer.
-9. The room closes with a large, candid verdict, a score grounded in what actually happened, and an optional public leaderboard entry.
+9. Refreshing the tab restores the exact live room. A separate one-use founder pause freezes the room, costs the least-interested investor, and records the pause duration on the public result.
+10. The room closes with a large, candid verdict, a score grounded in what actually happened, and an optional public leaderboard entry.
 
 Equity set to zero activates competition mode, which judges the WebMCP experience, implementation, originality, resilience, and human–agent collaboration instead of pretending there is a startup equity transaction.
 
@@ -62,17 +63,19 @@ The arena still renders in an ordinary browser, but a WebMCP-capable agent is re
 
 ## Scoring and leaderboard
 
-Difficulty changes how forgiving the panel is, not just the visual theme. Judges score answer quality, specificity, evidence, consistency, and whether the founder actually answered the question. Silence, repetition, contradictions, and evasions burn patience. Accepted deals and final scores can be submitted to the public leaderboard with the session duration.
+Difficulty changes how forgiving the panel is, not just the visual theme. Judges score answer quality, specificity, evidence, consistency, and whether the founder actually answered the question. In Hard and Legendary, investors may challenge an answer that sounds abruptly generic or assisted, then demand concrete founder-only proof rather than pretending to run an AI detector. Silence, repetition, contradictions, and evasions burn patience. Accepted deals and final scores can be submitted to the public leaderboard with active session duration and any founder pause time shown separately.
 
 ## Data and privacy boundary
 
 Pitch The AI uses its own project-scoped Sites storage. It does not use or write
 to a Promethios database.
 
-- The leaderboard stores only founder name, venture name, score, amount raised,
-  ask, pitch duration, and timestamp.
-- Pitch transcripts, camera video, microphone audio, and session recordings are
-  not uploaded with leaderboard entries.
+- The leaderboard stores the founder and venture names, agent signature, pitch
+  venue, score, terms, difficulty, lifeline use, active duration, pause duration,
+  opening pitch, transcript, verdict, and WebMCP tool-call receipt.
+- An opt-in founder photo may be linked to the public pitch record. Camera video,
+  microphone audio, and session recordings are not uploaded with leaderboard
+  entries.
 - **Share result** creates a branded final-verdict image in the browser. It is
   shared or downloaded locally and is not stored by the site.
 - Uploaded pitch evidence uses the Pitch The AI project bucket and is separate

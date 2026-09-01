@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   LifeBuoy,
   MapPin,
+  Pause,
   Trophy,
 } from 'lucide-react';
 
@@ -169,6 +170,15 @@ export default async function PitchRecordPage({
             <strong>
               <LifeBuoy />
               {entry.lifelinesUsed ? 'Second Chance used' : 'Not used'}
+            </strong>
+          </div>
+          <div>
+            <span>Founder pause</span>
+            <strong>
+              <Pause />
+              {entry.pauseSeconds
+                ? `${duration(entry.pauseSeconds)} recorded`
+                : 'Not used'}
             </strong>
           </div>
         </section>

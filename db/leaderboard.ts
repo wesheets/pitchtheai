@@ -13,6 +13,7 @@ export type StoredLeaderboardEntry = {
   askAmount: number;
   equity: number;
   durationSeconds: number;
+  pauseSeconds: number;
   difficulty: string;
   lifelinesUsed: number;
   openingPitch: string;
@@ -65,6 +66,7 @@ async function ensureLeaderboard() {
       ask_amount INTEGER NOT NULL DEFAULT 0,
       equity REAL NOT NULL DEFAULT 0,
       duration_seconds INTEGER NOT NULL DEFAULT 0,
+      pause_seconds INTEGER NOT NULL DEFAULT 0,
       difficulty TEXT NOT NULL DEFAULT 'medium',
       lifelines_used INTEGER NOT NULL DEFAULT 0,
       opening_pitch TEXT NOT NULL DEFAULT '',
@@ -81,6 +83,7 @@ async function ensureLeaderboard() {
   const existing = new Set(columns.results.map((column) => column.name));
   const additions = [
     ['duration_seconds', 'INTEGER NOT NULL DEFAULT 0'],
+    ['pause_seconds', 'INTEGER NOT NULL DEFAULT 0'],
     [
       'agent_signature',
       "TEXT NOT NULL DEFAULT 'Unspecified WebMCP agent'",
@@ -111,7 +114,8 @@ async function ensureLeaderboard() {
 const detailSelection = `id, founder_name AS founderName, company_name AS companyName,
   agent_signature AS agentSignature, pitch_venue AS pitchVenue,
   score, amount_raised AS amountRaised, ask_amount AS askAmount, equity,
-  duration_seconds AS durationSeconds, difficulty, lifelines_used AS lifelinesUsed,
+  duration_seconds AS durationSeconds, pause_seconds AS pauseSeconds,
+  difficulty, lifelines_used AS lifelinesUsed,
   opening_pitch AS openingPitch, transcript,
   verdict_summary AS verdictSummary, tool_calls AS toolCalls,
   founder_photo_material_id AS founderPhotoMaterialId, created_at AS createdAt`;
@@ -149,6 +153,7 @@ export async function saveLeaderboardEntry(input: {
   askAmount: number;
   equity: number;
   durationSeconds: number;
+  pauseSeconds: number;
   difficulty: string;
   lifelinesUsed: number;
   openingPitch: string;
@@ -181,6 +186,10 @@ export async function saveLeaderboardEntry(input: {
       0,
       Math.min(8 * 60 * 60, Math.round(input.durationSeconds)),
     ),
+    pauseSeconds: Math.max(
+      0,
+      Math.min(8 * 60 * 60, Math.round(input.pauseSeconds)),
+    ),
     difficulty: ['easy', 'medium', 'hard', 'legendary'].includes(
       input.difficulty,
     )
@@ -197,9 +206,9 @@ export async function saveLeaderboardEntry(input: {
   await env.DB.prepare(
     `INSERT INTO leaderboard
       (id, founder_name, company_name, agent_signature, pitch_venue, score, amount_raised, ask_amount, equity,
-       duration_seconds, difficulty, lifelines_used, opening_pitch, transcript, verdict_summary,
+       duration_seconds, pause_seconds, difficulty, lifelines_used, opening_pitch, transcript, verdict_summary,
        tool_calls, founder_photo_material_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       entry.id,
@@ -212,6 +221,7 @@ export async function saveLeaderboardEntry(input: {
       entry.askAmount,
       entry.equity,
       entry.durationSeconds,
+      entry.pauseSeconds,
       entry.difficulty,
       entry.lifelinesUsed,
       entry.openingPitch,
