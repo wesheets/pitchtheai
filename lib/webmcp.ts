@@ -185,7 +185,10 @@ export function registerPitchTools(options: {
     }
   };
   const requireFounderTurnComplete = () => {
-    if (options.getSnapshot().founderTurn.status === 'awaiting') {
+    if (
+      options.getSnapshot().founderTurn.status === 'presenting' ||
+      options.getSnapshot().founderTurn.status === 'awaiting'
+    ) {
       throw new Error(
         'The founder has not answered the current judge. Call wait_for_founder_response before posting another turn.',
       );
@@ -310,7 +313,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read this tab\'s unique room code, opening draft, live pitch transcript, founder/judge dialogue, response gate, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder\'s exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
+        "Read this tab's unique room code, opening draft, live pitch transcript, founder/judge dialogue, response gate, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The founder's 45-second clock begins only when they click Respond, and any submitted answer remains available across slices. If a slice returns waiting, call it again immediately without analysis or another judge turn. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
       inputSchema: {
         type: 'object',
         properties: {},
@@ -371,7 +374,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_judge_turn',
       description:
-        'Post exactly one judge turn. The arena replaces the founder input with this judge\'s enlarged portrait and dialogue; the founder must click Respond before the input returns. Keep it focused and under 90 spoken words. Set answerQuality to rate the founder\'s immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue.',
+        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before their 45-second answer clock begins. Keep it focused and under 90 spoken words. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue.",
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -408,7 +411,7 @@ export function registerPitchTools(options: {
     {
       name: 'wait_for_founder_response',
       description:
-        'Wait up to 12 seconds for the human founder to answer the active judge by voice or text. The question keeps one shared 45-second deadline across calls. If the result is waiting, call this tool again immediately; if answered, evaluate the exact response; if timed_out, burn patience. Never post another judge while the founder gate is open.',
+        'Wait up to 12 seconds while the human reads the active judge, clicks Respond, and answers by voice or text. The 45-second response clock starts only on Respond, not when the judge speaks. A submitted answer persists across calls, and a five-second transport grace reconciles answers already in flight. If the result is waiting, call this again immediately without analysis or another judge turn. If answered, evaluate the exact response; if timed_out, burn patience.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -537,7 +540,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_panel_verdict',
       description:
-        'End the visible pitch with a 0–100 score, capital raised, and a concise roast-style arena verdict. The verdict is displayed large, so write like a ruthless game-show judge, not a professional investment memo. Call out the founder\'s actual evasions and unanswered questions in plain language. Repeated evasion or silence with no credible answers belongs below 15; if every judge is out and the founder never answered the core questions, score 0–8. The app enforces these caps from the turn ratings. Use amountRaised 0 when no offer is accepted or all judges are out.',
+        "End the visible pitch with a 0–100 score, capital raised, and a concise roast-style arena verdict. The verdict is displayed large, so write like a ruthless game-show judge, not a professional investment memo. Call out the founder's actual evasions and unanswered questions in plain language. Repeated evasion or silence with no credible answers belongs below 15; if every judge is out and the founder never answered the core questions, score 0–8. The app enforces these caps from the turn ratings. Use amountRaised 0 when no offer is accepted or all judges are out.",
       inputSchema: {
         type: 'object',
         required: ['score', 'summary', 'amountRaised'],

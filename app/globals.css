@@ -1562,7 +1562,11 @@ textarea {
   padding: 1.25rem;
   color: #fff;
   background:
-    radial-gradient(circle at center, rgb(120 0 16 / 0.26), rgb(0 0 0 / 0.9) 72%),
+    radial-gradient(
+      circle at center,
+      rgb(120 0 16 / 0.26),
+      rgb(0 0 0 / 0.9) 72%
+    ),
     repeating-linear-gradient(
       -12deg,
       transparent 0 9px,
@@ -1720,22 +1724,36 @@ textarea {
   border-radius: 10px;
 }
 .judge-focus-stage {
+  position: fixed;
+  z-index: 60;
+  top: 52svh;
+  left: 50%;
   display: grid;
-  grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.28fr);
-  min-height: 255px;
-  border: 1px solid color-mix(in srgb, var(--judge-color) 45%, transparent);
-  border-radius: 12px;
-  padding: 0.65rem;
+  grid-template-rows: minmax(310px, 42svh) auto;
+  width: min(620px, calc(100vw - 36px));
+  max-height: calc(100svh - 86px);
+  overflow: auto;
+  border: 2px solid color-mix(in srgb, var(--judge-color) 70%, white 8%);
+  border-radius: 24px;
+  padding: 0.8rem;
   background:
-    radial-gradient(circle at 22% 38%, color-mix(in srgb, var(--judge-color) 13%, transparent), transparent 38%),
+    radial-gradient(
+      circle at 22% 38%,
+      color-mix(in srgb, var(--judge-color) 13%, transparent),
+      transparent 38%
+    ),
     linear-gradient(135deg, rgb(9 12 17 / 0.99), rgb(0 0 0 / 0.97));
   box-shadow:
     inset 0 0 42px rgb(0 0 0 / 0.75),
-    0 0 28px color-mix(in srgb, var(--judge-color) 13%, transparent);
-  animation: judge-focus-arrive 0.38s cubic-bezier(0.2, 0.84, 0.23, 1) both;
+    0 36px 120px #000,
+    0 0 56px color-mix(in srgb, var(--judge-color) 34%, transparent);
+  transform: translate(-50%, -50%);
+  animation: judge-focus-center-arrive 0.38s cubic-bezier(0.2, 0.84, 0.23, 1)
+    both;
 }
 .judge-focus-portrait-wrap {
   min-width: 0;
+  min-height: 0;
   padding: 0.2rem;
 }
 .judge-focus-portrait {
@@ -1743,7 +1761,7 @@ textarea {
   overflow: hidden;
   width: 100%;
   height: 100%;
-  min-height: 230px;
+  min-height: 310px;
   border: 2px solid color-mix(in srgb, var(--judge-color) 70%, white 7%);
   border-radius: 18px;
   background-repeat: no-repeat;
@@ -1783,7 +1801,9 @@ textarea {
   font: 800 clamp(18px, 1.55vw, 27px) var(--font-geist-mono);
   text-align: center;
   text-transform: uppercase;
-  text-shadow: 0 2px 14px #000, 0 0 10px var(--judge-color);
+  text-shadow:
+    0 2px 14px #000,
+    0 0 10px var(--judge-color);
 }
 .judge-focus-portrait > small {
   right: 0.8rem;
@@ -1803,14 +1823,17 @@ textarea {
   font: 950 clamp(28px, 3.5vw, 52px) var(--font-geist-sans);
   text-align: center;
   transform: rotate(-5deg);
-  text-shadow: 0 5px 0 #4d0713, 0 0 30px #ff3154;
+  text-shadow:
+    0 5px 0 #4d0713,
+    0 0 30px #ff3154;
 }
 .judge-focus-copy {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  padding: 1rem clamp(0.8rem, 2vw, 1.6rem);
+  padding: 1rem clamp(0.9rem, 2vw, 1.7rem) 1.15rem;
+  text-align: center;
 }
 .judge-focus-kicker {
   color: var(--judge-color);
@@ -1844,11 +1867,16 @@ textarea {
   color: #ff7189;
 }
 .judge-focus-respond {
-  align-self: flex-start;
+  align-self: center;
   margin-top: 1rem;
   color: #030303;
   background: var(--judge-color);
   box-shadow: 0 0 22px color-mix(in srgb, var(--judge-color) 25%, transparent);
+}
+.monitor-focused-away {
+  opacity: 0.13;
+  filter: brightness(0.32) saturate(0.5);
+  pointer-events: none;
 }
 .judge-focus-out {
   border-color: rgb(255 70 93 / 0.62);
@@ -2302,7 +2330,9 @@ textarea {
   color: #ffc857;
   font: 900 clamp(74px, 9vw, 132px) / 0.8 var(--font-geist-sans);
   letter-spacing: -0.09em;
-  text-shadow: 0 8px 0 #57370a, 0 0 42px rgb(255 183 45 / 0.5);
+  text-shadow:
+    0 8px 0 #57370a,
+    0 0 42px rgb(255 183 45 / 0.5);
 }
 .arena-final-score small {
   margin: 0 0 0.2rem 0.3rem;
@@ -2354,6 +2384,18 @@ textarea {
     filter: blur(0);
   }
 }
+@keyframes judge-focus-center-arrive {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 24px)) scale(1.08);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+}
 @keyframes queued-card-arrive {
   from {
     opacity: 0;
@@ -2391,7 +2433,8 @@ textarea {
     opacity: 0;
     transform: scale(1.25);
   }
-  18%, 78% {
+  18%,
+  78% {
     opacity: 1;
     transform: scale(1);
   }
@@ -3058,7 +3101,9 @@ textarea {
     grid-template-columns: 1fr;
   }
   .judge-focus-stage {
-    grid-template-columns: minmax(135px, 0.7fr) minmax(0, 1.3fr);
+    top: 54svh;
+    grid-template-rows: minmax(280px, 40svh) auto;
+    width: min(560px, calc(100vw - 24px));
   }
   .deal-offer-grid-3,
   .deal-offer-grid-4 {
@@ -3111,7 +3156,10 @@ textarea {
     grid-template-columns: 1fr;
   }
   .judge-focus-stage {
-    grid-template-columns: 1fr;
+    top: 52svh;
+    grid-template-rows: minmax(260px, 43svh) auto;
+    width: calc(100vw - 16px);
+    max-height: calc(100svh - 28px);
   }
   .deal-offer-grid {
     --offer-columns: 1;

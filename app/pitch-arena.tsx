@@ -112,7 +112,7 @@ export type PitchFeedEntry = {
   streaming?: boolean;
 };
 export type FounderTurnState = {
-  status: 'open' | 'awaiting' | 'answered' | 'timed_out';
+  status: 'open' | 'presenting' | 'awaiting' | 'answered' | 'timed_out';
   judgeId?: JudgeId;
   question?: string;
   deadline?: number;
@@ -319,7 +319,10 @@ function portraitPosition(mood: JudgeMood) {
   if (mood === 'impressed') return '100%';
   return '0%';
 }
-function reactionPortraitStyle(judge: (typeof JUDGES)[number], reaction: JudgeReaction) {
+function reactionPortraitStyle(
+  judge: (typeof JUDGES)[number],
+  reaction: JudgeReaction,
+) {
   if (!reaction.reactionStyle || reaction.reactionStyle === 'neutral') {
     return {
       backgroundImage: `url(${judge.portrait})`,
@@ -355,8 +358,9 @@ export function PitchArena() {
     status: 'idle',
   });
   const [acceptedBid, setAcceptedBid] = useState<Bid | null>(null);
-  const [counteringJudgeId, setCounteringJudgeId] =
-    useState<JudgeId | null>(null);
+  const [counteringJudgeId, setCounteringJudgeId] = useState<JudgeId | null>(
+    null,
+  );
   const [counterAmount, setCounterAmount] = useState('');
   const [counterEquity, setCounterEquity] = useState('');
   const [counterNote, setCounterNote] = useState('');
@@ -506,8 +510,8 @@ export function PitchArena() {
     launchCount !== null
       ? 'game'
       : pitch.status === 'live' && pitch.secondsLeft <= 120
-      ? 'heartbeat'
-      : pitch.soundtrack;
+        ? 'heartbeat'
+        : pitch.soundtrack;
 
   useEffect(() => {
     soundtrackStopRef.current?.();
@@ -847,10 +851,9 @@ export function PitchArena() {
       }));
       if (reaction.question) {
         const nextTurn: FounderTurnState = {
-          status: 'awaiting',
+          status: 'presenting',
           judgeId: reaction.judgeId,
           question: reaction.question,
-          deadline: Date.now() + 45_000,
         };
         founderTurnRef.current = nextTurn;
         setFounderTurn(nextTurn);
@@ -897,7 +900,7 @@ export function PitchArena() {
           question: turn.question,
         });
       }
-      if (turn.status !== 'awaiting') {
+      if (turn.status !== 'presenting' && turn.status !== 'awaiting') {
         return Promise.resolve({
           status: turn.status,
           message: 'No judge is waiting for an answer.',
@@ -908,19 +911,21 @@ export function PitchArena() {
           new Error('A founder response wait is already active.'),
         );
       }
-      const deadline = turn.deadline ?? Date.now();
-      const deadlineRemaining = Math.max(0, deadline - Date.now());
-      const waitSlice = Math.max(
-        0,
-        Math.min(timeoutSeconds * 1000, deadlineRemaining),
-      );
+      const waitStartedAt = Date.now();
+      const maxWaitMs = Math.max(1, timeoutSeconds) * 1000;
+      const graceMs = 5_000;
       return new Promise<Record<string, unknown>>((resolve) => {
-        const timer = window.setTimeout(() => {
-          const latest = founderTurnRef.current;
-          const latestDeadline = latest.deadline ?? deadline;
-          if (latest.status === 'answered') {
+        const finish = (result: Record<string, unknown>) => {
+          if (responseWaiterRef.current) {
+            window.clearTimeout(responseWaiterRef.current.timer);
             responseWaiterRef.current = null;
-            resolve({
+          }
+          resolve(result);
+        };
+        function check() {
+          const latest = founderTurnRef.current;
+          if (latest.status === 'answered') {
+            finish({
               status: 'answered',
               response: latest.lastResponse,
               judgeId: latest.judgeId,
@@ -928,23 +933,32 @@ export function PitchArena() {
             });
             return;
           }
-          if (latest.status !== 'awaiting') {
-            responseWaiterRef.current = null;
-            resolve({ status: latest.status });
+          if (latest.status !== 'presenting' && latest.status !== 'awaiting') {
+            finish({ status: latest.status });
             return;
           }
-          if (Date.now() < latestDeadline) {
-            responseWaiterRef.current = null;
-            resolve({
+          const now = Date.now();
+          if (now - waitStartedAt >= maxWaitMs) {
+            finish({
               status: 'waiting',
               judgeId: latest.judgeId,
               question: latest.question,
-              secondsRemaining: Math.max(
-                1,
-                Math.ceil((latestDeadline - Date.now()) / 1000),
-              ),
-              next: 'Call wait_for_founder_response again immediately. Do not post another judge turn.',
+              phase:
+                latest.status === 'presenting'
+                  ? 'waiting_for_respond'
+                  : 'waiting_for_answer',
+              secondsRemaining:
+                latest.status === 'awaiting' && latest.deadline
+                  ? Math.max(0, Math.ceil((latest.deadline - now) / 1000))
+                  : 45,
+              next: 'Keep the response gate open. Call wait_for_founder_response again and do not post another judge turn.',
             });
+            return;
+          }
+          if (latest.status === 'presenting' || !latest.deadline) {
+            return;
+          }
+          if (now <= latest.deadline + graceMs) {
             return;
           }
           const timedOut: FounderTurnState = { ...latest, status: 'timed_out' };
@@ -960,19 +974,36 @@ export function PitchArena() {
             author: 'Arena',
             text: 'No answer. Patience is burning.',
           });
-          responseWaiterRef.current = null;
-          resolve({
+          finish({
             status: 'timed_out',
             judgeId: latest.judgeId,
             question: latest.question,
             waitedSeconds: 45,
           });
-        }, waitSlice);
+        }
+        const timer = window.setInterval(check, 150);
         responseWaiterRef.current = { resolve, timer };
+        check();
       });
     },
     [appendFeed],
   );
+
+  const beginFounderResponse = useCallback(() => {
+    const turn = founderTurnRef.current;
+    if (turn.status === 'presenting') {
+      const awaiting: FounderTurnState = {
+        ...turn,
+        status: 'awaiting',
+        deadline: Date.now() + 45_000,
+      };
+      founderTurnRef.current = awaiting;
+      setFounderTurn(awaiting);
+      setResponseSecondsLeft(45);
+    }
+    setFocusedJudgeId(null);
+    window.requestAnimationFrame(() => responseInputRef.current?.focus());
+  }, []);
   const waitForFounderOfferDecision = useCallback(
     (timeoutSeconds = 12) => {
       const decision = offerDecisionRef.current;
@@ -993,7 +1024,9 @@ export function PitchArena() {
         });
       }
       if (offerWaiterRef.current) {
-        return Promise.reject(new Error('An offer-decision wait is already active.'));
+        return Promise.reject(
+          new Error('An offer-decision wait is already active.'),
+        );
       }
       const deadline = decision.deadline ?? Date.now();
       const deadlineRemaining = Math.max(0, deadline - Date.now());
@@ -1269,10 +1302,7 @@ export function PitchArena() {
       const finalPitch = {
         ...snapshot,
         status: 'final' as const,
-        score: Math.max(
-          0,
-          Math.min(scoreCap, 100, Math.round(result.score)),
-        ),
+        score: Math.max(0, Math.min(scoreCap, 100, Math.round(result.score))),
         summary: result.summary,
         amountRaised: Math.max(0, Math.round(result.amountRaised)),
         durationSeconds: Math.max(
@@ -1408,10 +1438,7 @@ export function PitchArena() {
     if (offerDecision.status !== 'choosing' || !offerDecision.deadline) return;
     const tick = () => {
       setResponseSecondsLeft(
-        Math.max(
-          0,
-          Math.ceil((offerDecision.deadline! - Date.now()) / 1000),
-        ),
+        Math.max(0, Math.ceil((offerDecision.deadline! - Date.now()) / 1000)),
       );
     };
     tick();
@@ -1429,7 +1456,7 @@ export function PitchArena() {
       }));
       appendFeed({ kind: 'founder', author: 'Founder', text: cleaned });
       const turn = founderTurnRef.current;
-      if (turn.status === 'awaiting') {
+      if (turn.status === 'presenting' || turn.status === 'awaiting') {
         const answered: FounderTurnState = {
           ...turn,
           status: 'answered',
@@ -1555,7 +1582,8 @@ export function PitchArena() {
       setListening(false);
       if (
         !recognitionFailed &&
-        founderTurnRef.current.status === 'awaiting' &&
+        (founderTurnRef.current.status === 'presenting' ||
+          founderTurnRef.current.status === 'awaiting') &&
         draftRef.current.trim()
       ) {
         submitFounderResponse(draftRef.current);
@@ -1602,7 +1630,63 @@ export function PitchArena() {
     : undefined;
   const founderFeed = feed.filter((entry) => entry.kind !== 'judge').slice(-6);
   const pitchQueued =
-    pitch.status === 'lobby' && handoffStatus === 'waiting' && Boolean(draft.trim());
+    pitch.status === 'lobby' &&
+    handoffStatus === 'waiting' &&
+    Boolean(draft.trim());
+  const focusedJudgeOverlay =
+    focusedJudge && focusedReaction ? (
+      <div
+        className={`judge-focus-stage ${focusedReaction.state === 'out' ? 'judge-focus-out' : ''}`}
+        style={
+          {
+            '--judge-color': focusedJudge.color,
+          } as React.CSSProperties
+        }
+        aria-live="assertive"
+      >
+        <div className="judge-focus-portrait-wrap">
+          <div
+            key={`${focusedJudge.id}-${focusedReaction.mood}-${focusedReaction.reactionStyle}-focus`}
+            className="judge-focus-portrait screen-change"
+            style={reactionPortraitStyle(focusedJudge, focusedReaction)}
+          >
+            <div className="crt-scanlines" aria-hidden="true" />
+            <span>{stateLabel(focusedReaction.state)}</span>
+            <strong>{focusedJudge.name}</strong>
+            <small>{focusedJudge.role}</small>
+            {focusedReaction.state === 'out' && <b>I&apos;M OUT</b>}
+          </div>
+        </div>
+        <div className="judge-focus-copy">
+          <span className="judge-focus-kicker">
+            {focusedReaction.state === 'out'
+              ? 'Decision delivered'
+              : `${focusedJudge.name} has the floor`}
+          </span>
+          <blockquote>“{focusedReaction.spoken}”</blockquote>
+          {focusedReaction.question && (
+            <p className="judge-focus-question">{focusedReaction.question}</p>
+          )}
+          {focusedReaction.state === 'out' && (
+            <p className="judge-focus-reason">
+              <strong>Why:</strong>{' '}
+              {focusedReaction.outReason ?? focusedReaction.spoken}
+            </p>
+          )}
+          <Button
+            className="judge-focus-respond"
+            onClick={
+              focusedReaction.question
+                ? beginFounderResponse
+                : () => setFocusedJudgeId(null)
+            }
+          >
+            {focusedReaction.question ? 'Respond' : 'Back to the room'}
+            <ArrowUpRight data-icon="inline-end" />
+          </Button>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <main className="room-arena text-[#f6f2e9]">
@@ -1715,6 +1799,7 @@ export function PitchArena() {
       <section
         className={`room-stage room-${pitch.status} ${pendingEvidenceCount > 0 && pitch.status === 'live' ? 'room-evidence-pending' : ''}`}
       >
+        {focusedJudgeOverlay}
         <div className="judge-monitor-grid">
           <div className="room-title">
             <p>
@@ -1752,13 +1837,14 @@ export function PitchArena() {
             const judgeBid = bids.find((bid) => bid.judgeId === judge.id);
             const isActiveTurn =
               speakingJudge === judge.id ||
-              (founderTurn.status === 'awaiting' &&
+              ((founderTurn.status === 'presenting' ||
+                founderTurn.status === 'awaiting') &&
                 founderTurn.judgeId === judge.id);
             return (
               <article
                 key={judge.id}
                 data-judge={judge.id}
-                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''} ${isActiveTurn ? 'monitor-active-turn' : ''}`}
+                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''} ${isActiveTurn ? 'monitor-active-turn' : ''} ${focusedJudgeId === judge.id ? 'monitor-focused-away' : ''}`}
                 style={{ '--judge-color': judge.color } as React.CSSProperties}
               >
                 <div className="monitor-bezel">
@@ -1819,7 +1905,9 @@ export function PitchArena() {
               <button
                 onClick={() => {
                   setHandoffStatus('idle');
-                  setHandoffMessage('Edit your pitch, then send a fresh prompt.');
+                  setHandoffMessage(
+                    'Edit your pitch, then send a fresh prompt.',
+                  );
                 }}
               >
                 Edit &amp; recopy
@@ -2006,7 +2094,9 @@ export function PitchArena() {
                   </div>
                   <div className="arena-final-copy">
                     <p>THE ROOM&apos;S VERDICT</p>
-                    <h2>{pitch.amountRaised ? 'You got a deal.' : 'No deal.'}</h2>
+                    <h2>
+                      {pitch.amountRaised ? 'You got a deal.' : 'No deal.'}
+                    </h2>
                     <blockquote>{pitch.summary}</blockquote>
                     <div>
                       <b>
@@ -2041,8 +2131,8 @@ export function PitchArena() {
                         <blockquote>{acceptedBid.conditions}</blockquote>
                       )}
                       <small>
-                        The founder chose the investor. Waiting for the panel&apos;s
-                        final verdict.
+                        The founder chose the investor. Waiting for the
+                        panel&apos;s final verdict.
                       </small>
                     </div>
                   ) : (
@@ -2163,70 +2253,13 @@ export function PitchArena() {
                       )}
                       <button
                         className="deal-pass"
-                        onClick={() =>
-                          submitOfferDecision({ action: 'pass' })
-                        }
+                        onClick={() => submitOfferDecision({ action: 'pass' })}
                       >
                         Reject every offer
                       </button>
                     </>
                   )}
                 </section>
-              ) : focusedJudge && focusedReaction ? (
-                <div
-                  className={`judge-focus-stage ${focusedReaction.state === 'out' ? 'judge-focus-out' : ''}`}
-                  style={
-                    { '--judge-color': focusedJudge.color } as React.CSSProperties
-                  }
-                  aria-live="assertive"
-                >
-                  <div className="judge-focus-portrait-wrap">
-                    <div
-                      key={`${focusedJudge.id}-${focusedReaction.mood}-${focusedReaction.reactionStyle}-focus`}
-                      className="judge-focus-portrait screen-change"
-                      style={reactionPortraitStyle(focusedJudge, focusedReaction)}
-                    >
-                      <div className="crt-scanlines" aria-hidden="true" />
-                      <span>{stateLabel(focusedReaction.state)}</span>
-                      <strong>{focusedJudge.name}</strong>
-                      <small>{focusedJudge.role}</small>
-                      {focusedReaction.state === 'out' && (
-                        <b>I&apos;M OUT</b>
-                      )}
-                    </div>
-                  </div>
-                  <div className="judge-focus-copy">
-                    <span className="judge-focus-kicker">
-                      {focusedReaction.state === 'out'
-                        ? 'Decision delivered'
-                        : `${focusedJudge.name} has the floor`}
-                    </span>
-                    <blockquote>“{focusedReaction.spoken}”</blockquote>
-                    {focusedReaction.question && (
-                      <p className="judge-focus-question">
-                        {focusedReaction.question}
-                      </p>
-                    )}
-                    {focusedReaction.state === 'out' && (
-                      <p className="judge-focus-reason">
-                        <strong>Why:</strong>{' '}
-                        {focusedReaction.outReason ?? focusedReaction.spoken}
-                      </p>
-                    )}
-                    <Button
-                      className="judge-focus-respond"
-                      onClick={() => {
-                        setFocusedJudgeId(null);
-                        window.requestAnimationFrame(() =>
-                          responseInputRef.current?.focus(),
-                        );
-                      }}
-                    >
-                      {focusedReaction.question ? 'Respond' : 'Back to the room'}
-                      <ArrowUpRight data-icon="inline-end" />
-                    </Button>
-                  </div>
-                </div>
               ) : (
                 <div className="p-3">
                   {pendingEvidenceCount > 0 && (
