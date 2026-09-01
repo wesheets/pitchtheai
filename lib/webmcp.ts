@@ -9,6 +9,7 @@ import type {
   PitchDetailsUpdate,
   EvidenceReview,
   FounderTurnState,
+  JudgeLifelineState,
   JudgeRescueState,
   PitchDifficulty,
   PitchFeedEntry,
@@ -65,6 +66,7 @@ type PitchSnapshot = {
   conversation: PitchFeedEntry[];
   founderTurn: FounderTurnState;
   judgeRescue: JudgeRescueState;
+  judgeLifeline: JudgeLifelineState;
   evidenceReview: {
     pendingMaterialIds: string[];
     reviews: EvidenceReview[];
@@ -220,7 +222,11 @@ export function registerPitchTools(options: PitchToolOptions) {
 
   const modelContext = document.modelContext;
   const existing = activePitchToolRegistration;
-  if (existing && existing.modelContext === modelContext && !existing.disposed) {
+  if (
+    existing &&
+    existing.modelContext === modelContext &&
+    !existing.disposed
+  ) {
     if (existing.disposeTimer) {
       clearTimeout(existing.disposeTimer);
       existing.disposeTimer = null;
@@ -275,7 +281,8 @@ export function registerPitchTools(options: PitchToolOptions) {
     registration.registered.add(tool.name);
   };
   const requireEvidenceReview = () => {
-    const pending = optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
+    const pending =
+      optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
     if (pending.length) {
       throw new Error(
         `Review every uploaded pitch file before bringing in the judges. Pending material ids: ${pending.join(', ')}`,
@@ -313,6 +320,18 @@ export function registerPitchTools(options: PitchToolOptions) {
     ) {
       throw new Error(
         `The founder appealed to ${rescue.judgeId}. That same judge must answer the appeal before anyone else speaks.`,
+      );
+    }
+  };
+  const requireJudgeLifelineComplete = (nextJudgeId?: JudgeId) => {
+    const lifeline = optionsRef.current.getSnapshot().judgeLifeline;
+    if (
+      lifeline.status === 'pending' &&
+      lifeline.judgeId &&
+      nextJudgeId !== lifeline.judgeId
+    ) {
+      throw new Error(
+        `The founder used Second Chance on ${lifeline.judgeId}. That recalled judge must speak next and ask one final question before anyone else gets the floor.`,
       );
     }
   };
@@ -477,7 +496,8 @@ export function registerPitchTools(options: PitchToolOptions) {
         additionalProperties: false,
       },
       execute: (args) => {
-        const pending = optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
+        const pending =
+          optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
         const incoming = args.reviews as Array<{
           materialId: string;
           summary: string;
@@ -503,7 +523,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'post_judge_turn',
       description:
-        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before the difficulty-based answer clock begins. Keep it focused and under 90 spoken words. Respect pitch.difficulty: Easy coaches, Medium balances, Hard presses, Legendary is ruthless and makes offers rare. When equity is 0, use competition criteria—WebMCP fit, UX, human-agent collaboration, implementation, originality, and resilience—not ordinary investment traction. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue; then call wait_for_judge_rescue.",
+        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before the difficulty-based answer clock begins. Keep it focused and under 90 spoken words. Respect pitch.difficulty: Easy coaches, Medium balances, Hard presses, Legendary is ruthless and makes offers rare. When equity is 0, use competition criteria—WebMCP fit, UX, human-agent collaboration, implementation, originality, and resilience—not ordinary investment traction. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue; then call wait_for_judge_rescue. If judgeLifeline is pending, the recalled judge named there must speak next and ask one final question.",
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -520,6 +540,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireNoAcceptedDeal();
         const judge = args.judge as JudgeReaction;
         requireJudgeRescueComplete(judge.judgeId);
+        requireJudgeLifelineComplete(judge.judgeId);
         if (
           judge.state === 'out' &&
           (!judge.outReason || !judge.outReason.trim())
@@ -536,7 +557,7 @@ export function registerPitchTools(options: PitchToolOptions) {
             ? 'Call wait_for_founder_response now.'
             : judge.state === 'out'
               ? 'Call wait_for_judge_rescue now. The founder has one chance to stop this judge from leaving.'
-            : 'The founder may continue, or another judge may speak.',
+              : 'The founder may continue, or another judge may speak.',
         };
       },
     },
