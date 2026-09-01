@@ -3219,16 +3219,65 @@ textarea {
   font-size: 8px;
   font-weight: 750;
 }
-.founder-camera-actions button:last-child:not(:first-child) {
+.founder-camera-actions label {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 29px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  border: 1px solid rgb(255 195 75 / 0.22);
+  border-radius: 7px;
+  padding: 0.28rem 0.4rem;
+  color: #ffc857;
+  background: rgb(255 191 68 / 0.06);
+  font-size: 8px;
+  font-weight: 750;
+}
+.founder-camera-actions .icon-only {
   max-width: 31px;
 }
-.founder-camera-actions button:hover:not(:disabled) {
+.founder-camera-actions button:hover:not(:disabled),
+.founder-camera-actions label:hover {
   color: #080705;
   background: #ffc857;
 }
-.founder-camera-actions svg {
+.founder-camera-actions svg,
+.founder-video-actions svg {
   width: 12px;
   height: 12px;
+}
+.founder-video-actions {
+  display: grid;
+  gap: 0.3rem;
+}
+.founder-video-actions button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  border: 1px solid rgb(121 221 255 / 0.2);
+  border-radius: 7px;
+  padding: 0.3rem 0.4rem;
+  color: #8de3ff;
+  background: rgb(54 176 220 / 0.06);
+  font-size: 8px;
+  font-weight: 780;
+}
+.founder-video-actions button:last-child {
+  border-color: rgb(255 82 109 / 0.22);
+  color: #ff8b9e;
+  background: rgb(74 3 18 / 0.18);
+}
+.founder-video-actions button:hover:not(:disabled) {
+  color: #060708;
+  background: #8de3ff;
+}
+.founder-video-actions button:last-child:hover:not(:disabled) {
+  background: #ff8b9e;
 }
 .founder-camera-slot > small {
   display: -webkit-box;
@@ -4336,6 +4385,9 @@ textarea {
   .founder-camera-actions {
     grid-column: 2;
   }
+  .founder-video-actions {
+    grid-column: 2;
+  }
   .room-final-verdict {
     grid-template-columns: auto auto;
   }
@@ -4365,7 +4417,8 @@ textarea {
   .founder-camera-slot > header,
   .founder-camera-slot > small,
   .founder-camera-frame,
-  .founder-camera-actions {
+  .founder-camera-actions,
+  .founder-video-actions {
     grid-row: auto;
     grid-column: 1;
   }

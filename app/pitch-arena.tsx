@@ -573,6 +573,7 @@ export function PitchArena() {
   const [cameraStatus, setCameraStatus] = useState<
     'off' | 'requesting' | 'live' | 'error'
   >('off');
+  const [cameraMode, setCameraMode] = useState<'photo' | 'live' | null>(null);
   const [cameraMessage, setCameraMessage] = useState('');
   const [handoffStatus, setHandoffStatus] = useState<
     'idle' | 'requesting' | 'waiting' | 'connected' | 'error'
@@ -738,8 +739,31 @@ export function PitchArena() {
     const stream = cameraStreamRef.current;
     if (cameraStatus !== 'live' || !video || !stream) return;
     video.srcObject = stream;
-    void video.play().catch(() => undefined);
-  }, [cameraStatus]);
+    const handleReady = () => {
+      setCameraMessage(
+        cameraMode === 'photo'
+          ? 'Camera preview ready. Capture a still when you are ready.'
+          : 'Founder video is live in the lower-left corner.',
+      );
+    };
+    video.addEventListener('loadeddata', handleReady, { once: true });
+    void video.play().catch(() => {
+      setCameraMessage(
+        'Camera permission opened, but this browser could not display the preview. Use Upload instead or open the game in Chrome.',
+      );
+    });
+    const previewTimer = window.setTimeout(() => {
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        setCameraMessage(
+          'Camera permission opened, but no preview arrived. Use Upload instead or open the game in Chrome.',
+        );
+      }
+    }, 4_000);
+    return () => {
+      window.clearTimeout(previewTimer);
+      video.removeEventListener('loadeddata', handleReady);
+    };
+  }, [cameraMode, cameraStatus]);
 
   const enableMusic = useCallback(async () => {
     const AudioContextClass = window.AudioContext;
@@ -2353,7 +2377,10 @@ export function PitchArena() {
     toolEvents,
   ]);
 
-  const startFounderCamera = useCallback(async (includeAudio = false) => {
+  const startFounderCamera = useCallback(async (
+    mode: 'photo' | 'live' = 'photo',
+    includeAudio = false,
+  ) => {
     const currentStream = cameraStreamRef.current;
     if (currentStream?.active) {
       if (includeAudio && !currentStream.getAudioTracks().length) {
@@ -2375,14 +2402,17 @@ export function PitchArena() {
           );
         }
       }
+      setCameraMode(mode);
       setCameraStatus('live');
       return currentStream;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraMode(null);
       setCameraStatus('error');
       setCameraMessage('This browser does not support a founder camera.');
       return null;
     }
+    setCameraMode(mode);
     setCameraStatus('requesting');
     setCameraMessage(
       includeAudio
@@ -2407,15 +2437,23 @@ export function PitchArena() {
       cameraStreamRef.current = stream;
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         cameraStreamRef.current = null;
+        setCameraMode(null);
         setCameraStatus('off');
         setCameraMessage('Founder camera stopped.');
       });
       setCameraStatus('live');
-      setCameraMessage('Founder camera is live only on this device.');
+      setCameraMessage(
+        mode === 'photo'
+          ? 'Opening the photo preview…'
+          : 'Opening founder video in the lower-left corner…',
+      );
       return stream;
     } catch {
+      setCameraMode(null);
       setCameraStatus('error');
-      setCameraMessage('Camera permission was declined or unavailable.');
+      setCameraMessage(
+        'Camera permission was declined or unavailable. Use Upload instead or try Chrome.',
+      );
       return null;
     }
   }, []);
@@ -2425,6 +2463,7 @@ export function PitchArena() {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
     cameraStreamRef.current = null;
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+    setCameraMode(null);
     setCameraStatus('off');
     setCameraMessage('Founder camera is off.');
   }, [recordingSession]);
@@ -2475,6 +2514,7 @@ export function PitchArena() {
     if (!recordingSession) {
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
+      setCameraMode(null);
       setCameraStatus('off');
     }
     setCameraMessage(
@@ -2483,6 +2523,30 @@ export function PitchArena() {
         : 'Readiness photo added as evidence. Judges can review presentation setup.',
     );
   }, [recordingSession, uploadMaterials]);
+
+  const uploadFounderPhoto = useCallback(
+    async (files: FileList | null) => {
+      const source = files?.[0];
+      if (!source) return;
+      if (!source.type.startsWith('image/')) {
+        setCameraMessage('Choose a JPG, PNG, or WebP image for the judges.');
+        return;
+      }
+      const extension = source.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const renamed = new File(
+        [source],
+        `founder-readiness-upload-${Date.now()}.${extension}`,
+        { type: source.type },
+      );
+      const uploaded = await uploadMaterials([renamed]);
+      setCameraMessage(
+        uploaded?.length
+          ? 'Founder photo uploaded. Judges can review it as readiness evidence.'
+          : 'The founder photo could not be uploaded. Try again.',
+      );
+    },
+    [uploadMaterials],
+  );
 
   const stopSessionRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -2510,7 +2574,7 @@ export function PitchArena() {
       return;
     }
     try {
-      const founderStream = await startFounderCamera(true);
+      const founderStream = await startFounderCamera('live', true);
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 30 },
         audio: true,
@@ -3279,7 +3343,7 @@ export function PitchArena() {
                 onClick={() =>
                   cameraStatus === 'live'
                     ? stopFounderCamera()
-                    : void startFounderCamera()
+                    : void startFounderCamera('live')
                 }
               >
                 {cameraStatus === 'live' ? <CameraOff /> : <Camera />}{' '}
@@ -3309,7 +3373,7 @@ export function PitchArena() {
           </DropdownMenu>
         </div>
       </header>
-      {cameraStatus === 'live' && (
+      {cameraStatus === 'live' && cameraMode === 'live' && (
         <aside
           className={`founder-video-dock ${presentationReset.status === 'awaiting' ? 'founder-video-reset' : ''}`}
           aria-label="Live founder video"
@@ -4075,7 +4139,15 @@ export function PitchArena() {
                   {recordingSession && <b>REC</b>}
                 </header>
                 <div className="founder-camera-frame">
-                  {founderPhoto ? (
+                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
+                    <video
+                      ref={cameraVideoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      aria-label="Founder photo preview"
+                    />
+                  ) : founderPhoto ? (
                     <NextImage
                       src={founderPhoto.url}
                       alt={`${pitch.founderName.trim() || 'Founder'} readiness capture`}
@@ -4098,29 +4170,90 @@ export function PitchArena() {
                       </span>
                     </div>
                   )}
-                  {founderPhoto && <i>MCP evidence</i>}
+                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
+                    <i>Live preview</i>
+                  ) : founderPhoto ? (
+                    <i>MCP evidence</i>
+                  ) : null}
                 </div>
                 <div className="founder-camera-actions">
-                  {cameraStatus === 'live' ? (
-                    <button
-                      type="button"
-                      onClick={() => void captureFounderPhoto()}
-                    >
-                      <Camera /> Take your photo
-                    </button>
+                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void captureFounderPhoto()}
+                      >
+                        <Camera /> Capture judge photo
+                      </button>
+                      <button
+                        className="icon-only"
+                        type="button"
+                        onClick={stopFounderCamera}
+                        aria-label="Close photo preview"
+                      >
+                        <CameraOff />
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => void startFounderCamera()}
+                      onClick={() => void startFounderCamera('photo')}
                       disabled={cameraStatus === 'requesting'}
                     >
                       <Camera />
                       {founderPhoto ? 'Retake photo' : 'Take your photo'}
                     </button>
                   )}
+                  <label>
+                    <ImageIcon /> Upload instead
+                    <input
+                      className="sr-only"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="user"
+                      onChange={(event) => {
+                        void uploadFounderPhoto(event.currentTarget.files);
+                        event.currentTarget.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="founder-video-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      cameraStatus === 'live' && cameraMode === 'live'
+                        ? stopFounderCamera()
+                        : void startFounderCamera('live')
+                    }
+                    disabled={cameraStatus === 'requesting' || recordingSession}
+                  >
+                    {cameraStatus === 'live' && cameraMode === 'live' ? (
+                      <CameraOff />
+                    ) : (
+                      <Video />
+                    )}
+                    {cameraStatus === 'live' && cameraMode === 'live'
+                      ? 'Stop live video'
+                      : 'Start live video'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      recordingSession
+                        ? stopSessionRecording()
+                        : void startSessionRecording()
+                    }
+                  >
+                    {recordingSession ? <CircleStop /> : <Video />}
+                    {recordingSession
+                      ? 'Stop & download recording'
+                      : 'Record arena + founder cam'}
+                  </button>
                 </div>
                 <small>
-                  {cameraMessage || 'Visible to judges only after capture.'}
+                  {cameraMessage ||
+                    'Photo evidence and lower-left live video are separate. Recording downloads locally.'}
                 </small>
               </section>
             </div>
