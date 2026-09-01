@@ -9,6 +9,8 @@ import type {
   PitchDetailsUpdate,
   EvidenceReview,
   FounderTurnState,
+  JudgeRescueState,
+  PitchDifficulty,
   PitchFeedEntry,
   PitchMaterial,
 } from '@/app/pitch-arena';
@@ -35,6 +37,7 @@ type PitchSnapshot = {
     amountRaised?: number;
     durationSeconds?: number;
     startedAt?: number;
+    difficulty: PitchDifficulty;
   };
   judges: Array<{
     id: JudgeId;
@@ -61,6 +64,7 @@ type PitchSnapshot = {
   materials: PitchMaterial[];
   conversation: PitchFeedEntry[];
   founderTurn: FounderTurnState;
+  judgeRescue: JudgeRescueState;
   evidenceReview: {
     pendingMaterialIds: string[];
     reviews: EvidenceReview[];
@@ -93,6 +97,7 @@ type PitchToolOptions = {
   waitForFounderResponse: (
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
+  waitForJudgeRescue: () => Promise<Record<string, unknown>>;
   waitForFounderOfferDecision: (
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
@@ -105,6 +110,11 @@ type PitchToolOptions = {
   }) => Promise<PitchSnapshot['pitch']>;
   fetchLeaderboard: () => Promise<LeaderboardEntry[]>;
   onStatus: (status: ToolStatus) => void;
+  onToolEvent: (event: {
+    toolName: string;
+    phase: 'called' | 'complete' | 'error';
+    createdAt: number;
+  }) => void;
 };
 
 declare global {
@@ -232,7 +242,32 @@ export function registerPitchTools(options: PitchToolOptions) {
   activePitchToolRegistration = registration;
   const optionsRef = registration.optionsRef;
   const add = async (tool: RegisterToolArgs) => {
-    await modelContext.registerTool(tool);
+    await modelContext.registerTool({
+      ...tool,
+      execute: async (args) => {
+        optionsRef.current.onToolEvent({
+          toolName: tool.name,
+          phase: 'called',
+          createdAt: Date.now(),
+        });
+        try {
+          const result = await tool.execute(args);
+          optionsRef.current.onToolEvent({
+            toolName: tool.name,
+            phase: 'complete',
+            createdAt: Date.now(),
+          });
+          return result;
+        } catch (error) {
+          optionsRef.current.onToolEvent({
+            toolName: tool.name,
+            phase: 'error',
+            createdAt: Date.now(),
+          });
+          throw error;
+        }
+      },
+    });
     if (registration.disposed) {
       await modelContext.unregisterTool?.(tool.name);
       return;
@@ -264,6 +299,23 @@ export function registerPitchTools(options: PitchToolOptions) {
       );
     }
   };
+  const requireJudgeRescueComplete = (nextJudgeId?: JudgeId) => {
+    const rescue = optionsRef.current.getSnapshot().judgeRescue;
+    if (rescue.status === 'offered' || rescue.status === 'awaiting') {
+      throw new Error(
+        'A judge is halfway out of the room. Call wait_for_judge_rescue before another judge speaks.',
+      );
+    }
+    if (
+      rescue.status === 'answered' &&
+      rescue.judgeId &&
+      nextJudgeId !== rescue.judgeId
+    ) {
+      throw new Error(
+        `The founder appealed to ${rescue.judgeId}. That same judge must answer the appeal before anyone else speaks.`,
+      );
+    }
+  };
   const requireNoAcceptedDeal = () => {
     if (optionsRef.current.getSnapshot().acceptedBid) {
       throw new Error(
@@ -275,7 +327,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'start_pitch',
       description:
-        'Start or replace the visible Pitch The AI session in the room already verified through get_pitch_context. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the twenty-minute clock.',
+        'Start or replace the visible Pitch The AI session in the room already verified through get_pitch_context. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. Set difficulty to easy, medium, hard, or legendary; it controls response time, pressure, scoring severity, rescue tolerance, and bid standards. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the twenty-minute clock.',
       inputSchema: {
         type: 'object',
         required: ['companyName', 'askAmount', 'equity'],
@@ -285,6 +337,11 @@ export function registerPitchTools(options: PitchToolOptions) {
           askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
           equity: { type: 'number', minimum: 0, maximum: 100 },
           openingPitch: { type: 'string', maxLength: 6000 },
+          difficulty: {
+            type: 'string',
+            enum: ['easy', 'medium', 'hard', 'legendary'],
+            default: 'medium',
+          },
         },
         additionalProperties: false,
       },
@@ -301,6 +358,10 @@ export function registerPitchTools(options: PitchToolOptions) {
             typeof args.openingPitch === 'string'
               ? args.openingPitch
               : optionsRef.current.getSnapshot().openingDraft,
+          difficulty:
+            typeof args.difficulty === 'string'
+              ? (args.difficulty as PitchDifficulty)
+              : optionsRef.current.getSnapshot().pitch.difficulty,
         });
         return {
           started: true,
@@ -308,6 +369,10 @@ export function registerPitchTools(options: PitchToolOptions) {
           companyName: args.companyName,
           askAmount: args.askAmount,
           equity: args.equity,
+          difficulty:
+            typeof args.difficulty === 'string'
+              ? args.difficulty
+              : optionsRef.current.getSnapshot().pitch.difficulty,
         };
       },
     },
@@ -377,7 +442,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'get_pitch_context',
       description:
-        "Read this tab's unique room code, opening draft, live pitch transcript, founder/judge dialogue, response gate, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The founder's 45-second clock begins only when they click Respond, and any submitted answer remains available across slices. If a slice returns waiting, call it again immediately without analysis or another judge turn. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
+        "Read this tab's unique room code, opening draft, live pitch transcript, difficulty, founder/judge dialogue, response gate, judge-rescue gate, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Equity 0 means competition mode: judge WebMCP fit, user experience, human-agent collaboration, implementation, originality, and resilience instead of pretending it is a normal investment. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The response clock begins only when they click Respond, and any submitted answer remains available across slices. If a judge goes out, immediately call wait_for_judge_rescue; the founder may appeal once and the same judge must answer it. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
       inputSchema: {
         type: 'object',
         properties: {},
@@ -438,7 +503,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'post_judge_turn',
       description:
-        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before their 45-second answer clock begins. Keep it focused and under 90 spoken words. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue.",
+        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before the difficulty-based answer clock begins. Keep it focused and under 90 spoken words. Respect pitch.difficulty: Easy coaches, Medium balances, Hard presses, Legendary is ruthless and makes offers rare. When equity is 0, use competition criteria—WebMCP fit, UX, human-agent collaboration, implementation, originality, and resilience—not ordinary investment traction. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue; then call wait_for_judge_rescue.",
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -454,6 +519,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireOfferDecisionComplete();
         requireNoAcceptedDeal();
         const judge = args.judge as JudgeReaction;
+        requireJudgeRescueComplete(judge.judgeId);
         if (
           judge.state === 'out' &&
           (!judge.outReason || !judge.outReason.trim())
@@ -468,6 +534,8 @@ export function registerPitchTools(options: PitchToolOptions) {
           judge,
           next: judge.question
             ? 'Call wait_for_founder_response now.'
+            : judge.state === 'out'
+              ? 'Call wait_for_judge_rescue now. The founder has one chance to stop this judge from leaving.'
             : 'The founder may continue, or another judge may speak.',
         };
       },
@@ -475,7 +543,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'wait_for_founder_response',
       description:
-        'Wait up to 12 seconds while the human reads the active judge, clicks Respond, and answers by voice or text. The 45-second response clock starts only on Respond, not when the judge speaks. A submitted answer persists across calls, and a five-second transport grace reconciles answers already in flight. If the result is waiting, call this again immediately without analysis or another judge turn. If answered, evaluate the exact response; if timed_out, burn patience.',
+        'Wait up to 12 seconds while the human reads the active judge, clicks Respond, and answers by voice or text. The difficulty-based response clock starts only on Respond, not when the judge speaks. A submitted answer persists across calls, and a five-second transport grace reconciles answers already in flight. If the result is waiting, call this again immediately without analysis or another judge turn. If answered, evaluate the exact response; if timed_out, burn patience.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -492,6 +560,17 @@ export function registerPitchTools(options: PitchToolOptions) {
         optionsRef.current.waitForFounderResponse(
           typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
         ),
+    },
+    {
+      name: 'wait_for_judge_rescue',
+      description:
+        "Wait while an out judge hangs halfway above the room. The founder may click “Wait, don't go!”, then gets exactly ten seconds to give one concrete reason the judge should stay. If answered, the same judge must respond next with post_judge_turn and may return to pressing/listening or say no and remain out. Never invent the appeal and never let another judge speak while this gate is open.",
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: () => optionsRef.current.waitForJudgeRescue(),
     },
     {
       name: 'post_judge_round',

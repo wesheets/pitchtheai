@@ -1,10 +1,14 @@
 'use client';
 
 import {
+  Activity,
   ArrowUpRight,
   AudioLines,
   ChevronDown,
   Clock3,
+  CircleStop,
+  Bug,
+  Download,
   FileText,
   Image as ImageIcon,
   LoaderCircle,
@@ -14,8 +18,10 @@ import {
   Paperclip,
   RotateCcw,
   Send,
+  Share2,
   Sparkles,
   Trophy,
+  Video,
   Volume2,
   VolumeX,
   X,
@@ -50,6 +56,7 @@ export type JudgeId = 'maya' | 'julian' | 'priya' | 'theo';
 export type JudgeState = 'listening' | 'pressing' | 'bidding' | 'out';
 export type JudgeMood = 'skeptical' | 'intrigued' | 'impressed';
 export type JudgeReactionStyle = 'neutral' | 'laughing' | 'exasperated';
+export type PitchDifficulty = 'easy' | 'medium' | 'hard' | 'legendary';
 export type AnswerQuality =
   | 'unrated'
   | 'unanswered'
@@ -118,12 +125,32 @@ export type FounderTurnState = {
   deadline?: number;
   lastResponse?: string;
 };
+export type JudgeRescueState = {
+  status:
+    | 'idle'
+    | 'offered'
+    | 'awaiting'
+    | 'answered'
+    | 'saved'
+    | 'declined'
+    | 'timed_out';
+  judgeId?: JudgeId;
+  outReason?: string;
+  response?: string;
+  deadline?: number;
+};
 export type EvidenceReview = {
   materialId: string;
   summary: string;
   reviewedAt: number;
 };
 type PitchStatus = 'lobby' | 'live' | 'final';
+type ArenaToolEvent = {
+  id: string;
+  toolName: string;
+  phase: 'called' | 'complete' | 'error';
+  createdAt: number;
+};
 export type PanelMood =
   | 'skeptical'
   | 'surprised'
@@ -144,6 +171,7 @@ type PitchState = {
   favorability: number;
   mood: PanelMood;
   soundtrack: Soundtrack;
+  difficulty: PitchDifficulty;
   summary?: string;
   score?: number;
   amountRaised?: number;
@@ -177,6 +205,7 @@ type QueuedPitchSession = {
   equity: number;
   openingPitch: string;
   handoffMessage: string;
+  difficulty?: PitchDifficulty;
 };
 
 const JUDGES: Array<{
@@ -233,7 +262,38 @@ const DEFAULT_PITCH: PitchState = {
   favorability: 50,
   mood: 'skeptical',
   soundtrack: 'cinematic',
+  difficulty: 'medium',
 };
+
+const DIFFICULTY_META: Record<
+  PitchDifficulty,
+  { label: string; responseSeconds: number; description: string }
+> = {
+  easy: {
+    label: 'Easy',
+    responseSeconds: 60,
+    description: 'Coaching room · generous follow-ups',
+  },
+  medium: {
+    label: 'Medium',
+    responseSeconds: 45,
+    description: 'Balanced room · honest pressure',
+  },
+  hard: {
+    label: 'Hard',
+    responseSeconds: 30,
+    description: 'Sharper questions · stricter scoring',
+  },
+  legendary: {
+    label: 'Legendary',
+    responseSeconds: 20,
+    description: 'No mercy · proof or perish',
+  },
+};
+
+function responseWindow(difficulty: PitchDifficulty) {
+  return DIFFICULTY_META[difficulty].responseSeconds;
+}
 
 const ROOM_CODE_STORAGE_KEY = 'pitchtheai.room-code.v1';
 const QUEUED_PITCH_STORAGE_KEY = 'pitchtheai.queued-pitch.v1';
@@ -259,7 +319,9 @@ function readQueuedPitchSession(): QueuedPitchSession | null {
       typeof value.askAmount !== 'number' ||
       typeof value.equity !== 'number' ||
       typeof value.openingPitch !== 'string' ||
-      typeof value.handoffMessage !== 'string'
+      typeof value.handoffMessage !== 'string' ||
+      (value.difficulty !== undefined &&
+        !['easy', 'medium', 'hard', 'legendary'].includes(value.difficulty))
     )
       return null;
     return value as QueuedPitchSession;
@@ -450,6 +512,7 @@ export function PitchArena() {
   const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
   const [focusedJudgeId, setFocusedJudgeId] = useState<JudgeId | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
   const [launchCount, setLaunchCount] = useState<3 | 2 | 1 | null>(null);
   const [roomCode, setRoomCode] = useState('------');
@@ -467,6 +530,9 @@ export function PitchArena() {
   const [founderTurn, setFounderTurn] = useState<FounderTurnState>({
     status: 'open',
   });
+  const [judgeRescue, setJudgeRescue] = useState<JudgeRescueState>({
+    status: 'idle',
+  });
   const [responseSecondsLeft, setResponseSecondsLeft] = useState(45);
   const [musicLevel, setMusicLevel] = useState(0.42);
   const [uploading, setUploading] = useState(false);
@@ -474,6 +540,12 @@ export function PitchArena() {
   const [toolStatus, setToolStatus] = useState<
     'checking' | 'ready' | 'browser-only'
   >('checking');
+  const [toolEvents, setToolEvents] = useState<ArenaToolEvent[]>([]);
+  const [utilityPanel, setUtilityPanel] = useState<
+    'activity' | 'transcript' | 'report' | null
+  >(null);
+  const [issueDraft, setIssueDraft] = useState('');
+  const [recordingSession, setRecordingSession] = useState(false);
   const [agentHost, setAgentHost] = useState<'codex' | 'bringmyai'>(() =>
     typeof window !== 'undefined' && hasBringMyAiAgentBridge()
       ? 'bringmyai'
@@ -495,6 +567,8 @@ export function PitchArena() {
   const evidenceReviewsRef = useRef(evidenceReviews);
   const feedRef = useRef(feed);
   const founderTurnRef = useRef(founderTurn);
+  const judgeRescueRef = useRef(judgeRescue);
+  const appealedJudgeIdsRef = useRef<Set<JudgeId>>(new Set());
   const answerQualityRef = useRef<Record<AnswerQuality, number>>({
     ...EMPTY_ANSWER_QUALITY,
   });
@@ -503,6 +577,10 @@ export function PitchArena() {
     timer: number;
   } | null>(null);
   const offerWaiterRef = useRef<{
+    resolve: (value: Record<string, unknown>) => void;
+    timer: number;
+  } | null>(null);
+  const rescueWaiterRef = useRef<{
     resolve: (value: Record<string, unknown>) => void;
     timer: number;
   } | null>(null);
@@ -519,6 +597,9 @@ export function PitchArena() {
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
   const responseInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     const hydrateRoom = window.setTimeout(() => {
@@ -539,6 +620,7 @@ export function PitchArena() {
           companyName: queued.companyName,
           askAmount: queued.askAmount,
           equity: queued.equity,
+          difficulty: queued.difficulty ?? 'medium',
         };
         pitchRef.current = restoredPitch;
         draftRef.current = queued.openingPitch;
@@ -586,6 +668,9 @@ export function PitchArena() {
   useEffect(() => {
     founderTurnRef.current = founderTurn;
   }, [founderTurn]);
+  useEffect(() => {
+    judgeRescueRef.current = judgeRescue;
+  }, [judgeRescue]);
   useEffect(() => {
     panelProfileRef.current = panelProfile;
   }, [panelProfile]);
@@ -790,6 +875,7 @@ export function PitchArena() {
       setCounterNote('');
       setDraft('');
       setFocusedJudgeId(null);
+      setComposerOpen(false);
       answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
       setFeed(
         openingPitch
@@ -805,7 +891,10 @@ export function PitchArena() {
           : [],
       );
       setFounderTurn({ status: 'open' });
-      setResponseSecondsLeft(45);
+      judgeRescueRef.current = { status: 'idle' };
+      setJudgeRescue({ status: 'idle' });
+      appealedJudgeIdsRef.current.clear();
+      setResponseSecondsLeft(responseWindow(nextPitch.difficulty));
       twoMinuteWarningRef.current = false;
       setHandoffStatus('connected');
       setHandoffMessage('Agent connected. Entering the room…');
@@ -845,6 +934,7 @@ export function PitchArena() {
         companyName,
         askAmount: pitch.askAmount,
         equity: pitch.equity,
+        difficulty: pitch.difficulty,
         pitch: draft,
       });
       setAgentHost(result.host);
@@ -860,6 +950,7 @@ export function PitchArena() {
         companyName,
         askAmount: pitch.askAmount,
         equity: pitch.equity,
+        difficulty: pitch.difficulty,
         openingPitch: draft,
         handoffMessage: waitingMessage,
       });
@@ -903,8 +994,12 @@ export function PitchArena() {
     setCounterNote('');
     setDraft('');
     setFocusedJudgeId(null);
+    setComposerOpen(false);
     setFeed([]);
     setFounderTurn({ status: 'open' });
+    judgeRescueRef.current = { status: 'idle' };
+    setJudgeRescue({ status: 'idle' });
+    appealedJudgeIdsRef.current.clear();
     setEvidenceReviews({});
     answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
     twoMinuteWarningRef.current = false;
@@ -920,6 +1015,11 @@ export function PitchArena() {
       window.clearTimeout(offerWaiterRef.current.timer);
       offerWaiterRef.current.resolve({ status: 'cancelled' });
       offerWaiterRef.current = null;
+    }
+    if (rescueWaiterRef.current) {
+      window.clearInterval(rescueWaiterRef.current.timer);
+      rescueWaiterRef.current.resolve({ status: 'cancelled' });
+      rescueWaiterRef.current = null;
     }
     stopVoices();
   }, [stopVoices]);
@@ -942,6 +1042,39 @@ export function PitchArena() {
         reactionStyle: reaction.reactionStyle ?? 'neutral',
         answerQuality,
       };
+      const currentRescue = judgeRescueRef.current;
+      if (
+        currentRescue.status === 'answered' &&
+        currentRescue.judgeId === reaction.judgeId
+      ) {
+        const resolvedRescue: JudgeRescueState = {
+          ...currentRescue,
+          status: reaction.state === 'out' ? 'declined' : 'saved',
+          outReason: reaction.outReason ?? currentRescue.outReason,
+        };
+        judgeRescueRef.current = resolvedRescue;
+        setJudgeRescue(resolvedRescue);
+        appendFeed({
+          kind: 'system',
+          author: 'Arena',
+          text:
+            reaction.state === 'out'
+              ? `${JUDGES.find((judge) => judge.id === reaction.judgeId)?.name ?? 'The judge'} heard the appeal and left anyway.`
+              : `${JUDGES.find((judge) => judge.id === reaction.judgeId)?.name ?? 'The judge'} is back in the room—for now.`,
+        });
+      } else if (
+        reaction.state === 'out' &&
+        !appealedJudgeIdsRef.current.has(reaction.judgeId)
+      ) {
+        const offeredRescue: JudgeRescueState = {
+          status: 'offered',
+          judgeId: reaction.judgeId,
+          outReason: reaction.outReason ?? reaction.spoken,
+          deadline: Date.now() + 12_000,
+        };
+        judgeRescueRef.current = offeredRescue;
+        setJudgeRescue(offeredRescue);
+      }
       const nextReactions = {
         ...reactionsRef.current,
         [reaction.judgeId]: normalized,
@@ -951,6 +1084,7 @@ export function PitchArena() {
       if (answerQuality !== 'unrated') {
         answerQualityRef.current[answerQuality] += 1;
       }
+      setComposerOpen(false);
       setFocusedJudgeId(reaction.judgeId);
       const panelInterest = Math.round(
         Object.values(nextReactions).reduce(
@@ -970,11 +1104,24 @@ export function PitchArena() {
                 : answerQuality === 'exceptional'
                   ? 10
                   : 0;
+      const difficultyMultiplier =
+        pitchRef.current.difficulty === 'easy'
+          ? 0.65
+          : pitchRef.current.difficulty === 'hard'
+            ? 1.2
+            : pitchRef.current.difficulty === 'legendary'
+              ? 1.5
+              : 1;
       setPitch((current) => ({
         ...current,
         round: current.round + 1,
         summary: roundSummary,
-        favorability: clampInterest(panelInterest + qualityAdjustment),
+        favorability: clampInterest(
+          panelInterest +
+            (qualityAdjustment < 0
+              ? qualityAdjustment * difficultyMultiplier
+              : qualityAdjustment / difficultyMultiplier),
+        ),
       }));
       if (reaction.question) {
         const nextTurn: FounderTurnState = {
@@ -984,7 +1131,7 @@ export function PitchArena() {
         };
         founderTurnRef.current = nextTurn;
         setFounderTurn(nextTurn);
-        setResponseSecondsLeft(45);
+        setResponseSecondsLeft(responseWindow(pitchRef.current.difficulty));
       } else {
         const nextTurn: FounderTurnState = { status: 'open' };
         founderTurnRef.current = nextTurn;
@@ -992,8 +1139,107 @@ export function PitchArena() {
       }
       speak([{ judgeId: reaction.judgeId, text: reaction.spoken }]);
     },
-    [speak],
+    [appendFeed, speak],
   );
+
+  const beginJudgeRescue = useCallback(() => {
+    const rescue = judgeRescueRef.current;
+    if (rescue.status !== 'offered' || !rescue.judgeId) return;
+    appealedJudgeIdsRef.current.add(rescue.judgeId);
+    const judge = JUDGES.find((item) => item.id === rescue.judgeId);
+    const question = `Give ${judge?.name ?? 'this judge'} one concrete reason to stay. You have ten seconds.`;
+    const awaitingRescue: JudgeRescueState = {
+      ...rescue,
+      status: 'awaiting',
+      deadline: Date.now() + 10_000,
+    };
+    const awaitingTurn: FounderTurnState = {
+      status: 'awaiting',
+      judgeId: rescue.judgeId,
+      question,
+      deadline: awaitingRescue.deadline,
+    };
+    judgeRescueRef.current = awaitingRescue;
+    founderTurnRef.current = awaitingTurn;
+    setJudgeRescue(awaitingRescue);
+    setFounderTurn(awaitingTurn);
+    setResponseSecondsLeft(10);
+    setFocusedJudgeId(null);
+    setComposerOpen(true);
+  }, []);
+
+  const waitForJudgeRescue = useCallback(() => {
+    const initial = judgeRescueRef.current;
+    if (initial.status === 'answered') {
+      return Promise.resolve({
+        status: 'answered',
+        judgeId: initial.judgeId,
+        response: initial.response,
+        next: 'The same judge must now answer the founder appeal with post_judge_turn.',
+      });
+    }
+    if (initial.status !== 'offered' && initial.status !== 'awaiting') {
+      return Promise.resolve({ status: initial.status });
+    }
+    if (rescueWaiterRef.current) {
+      return Promise.reject(new Error('A judge rescue wait is already active.'));
+    }
+    return new Promise<Record<string, unknown>>((resolve) => {
+      const finish = (result: Record<string, unknown>) => {
+        if (rescueWaiterRef.current) {
+          window.clearInterval(rescueWaiterRef.current.timer);
+          rescueWaiterRef.current = null;
+        }
+        resolve(result);
+      };
+      const check = () => {
+        const latest = judgeRescueRef.current;
+        if (latest.status === 'answered') {
+          finish({
+            status: 'answered',
+            judgeId: latest.judgeId,
+            response: latest.response,
+            next: 'The same judge must now answer the founder appeal with post_judge_turn.',
+          });
+          return;
+        }
+        if (latest.status !== 'offered' && latest.status !== 'awaiting') {
+          finish({ status: latest.status, judgeId: latest.judgeId });
+          return;
+        }
+        if (!latest.deadline || Date.now() <= latest.deadline) return;
+        const timedOut: JudgeRescueState = {
+          ...latest,
+          status: latest.status === 'offered' ? 'declined' : 'timed_out',
+        };
+        if (latest.judgeId) appealedJudgeIdsRef.current.add(latest.judgeId);
+        judgeRescueRef.current = timedOut;
+        setJudgeRescue(timedOut);
+        if (latest.status === 'awaiting') {
+          const turn = founderTurnRef.current;
+          const timedOutTurn: FounderTurnState = {
+            ...turn,
+            status: 'timed_out',
+          };
+          founderTurnRef.current = timedOutTurn;
+          setFounderTurn(timedOutTurn);
+          appendFeed({
+            kind: 'system',
+            author: 'Arena',
+            text: 'Ten seconds gone. The judge is out.',
+          });
+        }
+        finish({
+          status: timedOut.status,
+          judgeId: latest.judgeId,
+          waitedSeconds: latest.status === 'awaiting' ? 10 : 12,
+        });
+      };
+      const timer = window.setInterval(check, 120);
+      rescueWaiterRef.current = { resolve, timer };
+      check();
+    });
+  }, [appendFeed]);
 
   const reviewPitchEvidence = useCallback(
     (reviews: EvidenceReview[]) => {
@@ -1077,7 +1323,7 @@ export function PitchArena() {
               secondsRemaining:
                 latest.status === 'awaiting' && latest.deadline
                   ? Math.max(0, Math.ceil((latest.deadline - now) / 1000))
-                  : 45,
+                  : responseWindow(pitchRef.current.difficulty),
               next: 'Keep the response gate open. Call wait_for_founder_response again and do not post another judge turn.',
             });
             return;
@@ -1105,7 +1351,7 @@ export function PitchArena() {
             status: 'timed_out',
             judgeId: latest.judgeId,
             question: latest.question,
-            waitedSeconds: 45,
+            waitedSeconds: responseWindow(pitchRef.current.difficulty),
           });
         }
         const timer = window.setInterval(check, 150);
@@ -1122,15 +1368,24 @@ export function PitchArena() {
       const awaiting: FounderTurnState = {
         ...turn,
         status: 'awaiting',
-        deadline: Date.now() + 45_000,
+        deadline:
+          Date.now() + responseWindow(pitchRef.current.difficulty) * 1000,
       };
       founderTurnRef.current = awaiting;
       setFounderTurn(awaiting);
-      setResponseSecondsLeft(45);
+      setResponseSecondsLeft(responseWindow(pitchRef.current.difficulty));
     }
     setFocusedJudgeId(null);
-    window.requestAnimationFrame(() => responseInputRef.current?.focus());
+    setComposerOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!composerOpen) return;
+    const frame = window.requestAnimationFrame(() =>
+      responseInputRef.current?.focus(),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [composerOpen]);
   const waitForFounderOfferDecision = useCallback(
     (timeoutSeconds = 12) => {
       const decision = offerDecisionRef.current;
@@ -1485,6 +1740,7 @@ export function PitchArena() {
         })),
         conversation: feedRef.current,
         founderTurn: founderTurnRef.current,
+        judgeRescue: judgeRescueRef.current,
         evidenceReview: {
           pendingMaterialIds: materialsRef.current
             .filter((material) => !evidenceReviewsRef.current[material.id])
@@ -1502,11 +1758,19 @@ export function PitchArena() {
       applyJudgeTurn,
       reviewPitchEvidence,
       waitForFounderResponse,
+      waitForJudgeRescue,
       waitForFounderOfferDecision,
       applyBidRound,
       finalizePitch,
       fetchLeaderboard,
       onStatus: setToolStatus,
+      onToolEvent: (event) =>
+        setToolEvents((current) =>
+          [
+            ...current,
+            { ...event, id: crypto.randomUUID() },
+          ].slice(-40),
+        ),
     });
     return unregister;
   }, [
@@ -1522,6 +1786,7 @@ export function PitchArena() {
     roomReady,
     waitForFounderOfferDecision,
     waitForFounderResponse,
+    waitForJudgeRescue,
   ]);
 
   useEffect(() => {
@@ -1593,6 +1858,29 @@ export function PitchArena() {
         };
         founderTurnRef.current = answered;
         setFounderTurn(answered);
+        const rescue = judgeRescueRef.current;
+        if (
+          rescue.status === 'awaiting' &&
+          rescue.judgeId === turn.judgeId
+        ) {
+          const answeredRescue: JudgeRescueState = {
+            ...rescue,
+            status: 'answered',
+            response: cleaned,
+          };
+          judgeRescueRef.current = answeredRescue;
+          setJudgeRescue(answeredRescue);
+          if (rescueWaiterRef.current) {
+            window.clearInterval(rescueWaiterRef.current.timer);
+            rescueWaiterRef.current.resolve({
+              status: 'answered',
+              judgeId: rescue.judgeId,
+              response: cleaned,
+              next: 'The same judge must now answer the founder appeal with post_judge_turn.',
+            });
+            rescueWaiterRef.current = null;
+          }
+        }
         if (responseWaiterRef.current) {
           window.clearTimeout(responseWaiterRef.current.timer);
           responseWaiterRef.current.resolve({
@@ -1610,6 +1898,7 @@ export function PitchArena() {
       }
       draftRef.current = '';
       setDraft('');
+      setComposerOpen(false);
     },
     [appendFeed],
   );
@@ -1647,6 +1936,143 @@ export function PitchArena() {
       setUploading(false);
     }
   }, []);
+
+  const sessionTranscript = useCallback(() => {
+    const lines = feed.map(
+      (entry) =>
+        `[${new Date(entry.createdAt).toLocaleTimeString()}] ${entry.author}: ${entry.text}`,
+    );
+    return [
+      `${pitch.companyName} — ${pitchAskLabel(pitch.askAmount, pitch.equity)}`,
+      `Difficulty: ${DIFFICULTY_META[pitch.difficulty].label}`,
+      `Room: ${roomCode}`,
+      '',
+      ...lines,
+      pitch.summary ? `\nFINAL VERDICT\n${pitch.summary}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }, [feed, pitch, roomCode]);
+
+  const downloadTranscript = useCallback(() => {
+    const blob = new Blob([sessionTranscript()], { type: 'text/plain' });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `${pitchRef.current.companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pitch'}-transcript.txt`;
+    link.click();
+    URL.revokeObjectURL(href);
+  }, [sessionTranscript]);
+
+  const shareSession = useCallback(async () => {
+    const shareData = {
+      title: `${pitchRef.current.companyName} — Pitch The AI`,
+      text: `${pitchRef.current.founderName} scored ${pitchRef.current.score ?? pitchRef.current.favorability}/100 in ${DIFFICULTY_META[pitchRef.current.difficulty].label} mode.`,
+      url: window.location.href,
+    };
+    if (navigator.share) await navigator.share(shareData);
+    else await navigator.clipboard.writeText(
+      `${shareData.title}\n${shareData.text}\n${shareData.url}`,
+    );
+  }, []);
+
+  const openIssueReport = useCallback(() => {
+    const recentTools = toolEvents
+      .slice(-12)
+      .map((event) => `${event.toolName}: ${event.phase}`)
+      .join('\n');
+    const body = [
+      issueDraft.trim(),
+      '',
+      '--- Arena diagnostics ---',
+      `Room: ${roomCode}`,
+      `Pitch: ${pitch.companyName}`,
+      `Status: ${pitch.status}`,
+      `Difficulty: ${pitch.difficulty}`,
+      `Founder gate: ${founderTurn.status}`,
+      `Judge rescue: ${judgeRescue.status}`,
+      `Recent WebMCP activity:\n${recentTools || 'none'}`,
+    ].join('\n');
+    window.open(
+      `https://github.com/wesheets/pitchtheai/issues/new?title=${encodeURIComponent(`Arena issue · ${roomCode}`)}&body=${encodeURIComponent(body)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }, [founderTurn.status, issueDraft, judgeRescue.status, pitch, roomCode, toolEvents]);
+
+  const stopSessionRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+    setRecordingSession(false);
+  }, []);
+
+  const startSessionRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
+      setHandoffMessage('This browser does not support session recording.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 30 },
+        audio: true,
+      });
+      const preferredMime = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+      ].find((mime) => MediaRecorder.isTypeSupported(mime));
+      const recorder = new MediaRecorder(stream, {
+        ...(preferredMime ? { mimeType: preferredMime } : {}),
+        videoBitsPerSecond: 1_500_000,
+        audioBitsPerSecond: 96_000,
+      });
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, {
+          type: recorder.mimeType || 'video/webm',
+        });
+        recordingChunksRef.current = [];
+        if (blob.size) {
+          const href = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = href;
+          link.download = `${pitchRef.current.companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pitch'}-session.webm`;
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
+        }
+        mediaRecorderRef.current = null;
+        setRecordingSession(false);
+      };
+      stream.getTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          if (recorder.state !== 'inactive') recorder.stop();
+        });
+      });
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recorder.start(1_000);
+      setRecordingSession(true);
+    } catch {
+      setHandoffMessage('Recording was cancelled or could not start.');
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== 'inactive'
+      )
+        mediaRecorderRef.current.stop();
+    },
+    [],
+  );
 
   const removeMaterial = useCallback(async (id: string) => {
     const response = await fetch('/api/materials', {
@@ -1805,21 +2231,239 @@ export function PitchArena() {
           <Button
             className="judge-focus-respond"
             onClick={
-              focusedReaction.question
+              focusedReaction.state === 'out' &&
+              judgeRescue.status === 'offered' &&
+              judgeRescue.judgeId === focusedJudge.id
+                ? beginJudgeRescue
+                : focusedReaction.question
                 ? beginFounderResponse
                 : () => setFocusedJudgeId(null)
             }
           >
-            {focusedReaction.question ? 'Respond' : 'Back to the room'}
+            {focusedReaction.state === 'out' &&
+            judgeRescue.status === 'offered' &&
+            judgeRescue.judgeId === focusedJudge.id
+              ? "Wait, don't go!"
+              : focusedReaction.question
+                ? 'Respond'
+                : 'Back to the room'}
             <ArrowUpRight data-icon="inline-end" />
           </Button>
+          {focusedReaction.state === 'out' &&
+            judgeRescue.status === 'offered' &&
+            judgeRescue.judgeId === focusedJudge.id && (
+              <button
+                type="button"
+                className="judge-focus-accept-out"
+                onClick={() => {
+                  const declined: JudgeRescueState = {
+                    ...judgeRescue,
+                    status: 'declined',
+                  };
+                  judgeRescueRef.current = declined;
+                  appealedJudgeIdsRef.current.add(focusedJudge.id);
+                  setJudgeRescue(declined);
+                  setFocusedJudgeId(null);
+                }}
+              >
+                Let them leave
+              </button>
+            )}
         </div>
       </div>
     ) : null;
 
+  const founderComposerOverlay =
+    pitch.status === 'live' &&
+    composerOpen &&
+    founderTurn.status !== 'presenting' ? (
+      <dialog
+        open
+        className="founder-composer-stage"
+        aria-labelledby="founder-composer-title"
+      >
+        <div className="founder-composer-header">
+          <div>
+            <span>
+              {founderTurn.status === 'awaiting'
+                ? `${waitingJudge?.name ?? 'The judge'} is waiting`
+                : 'You have the floor'}
+            </span>
+            <h2 id="founder-composer-title">
+              {founderTurn.status === 'awaiting'
+                ? 'Answer the room'
+                : 'Add to your pitch'}
+            </h2>
+          </div>
+          <div className="founder-composer-header-actions">
+            {founderTurn.status === 'awaiting' && (
+              <b
+                className={
+                  responseSecondsLeft <= 10 ? 'composer-timer-urgent' : ''
+                }
+                aria-label={`${responseSecondsLeft} seconds remaining`}
+              >
+                {String(Math.floor(responseSecondsLeft / 60)).padStart(2, '0')}:
+                {String(responseSecondsLeft % 60).padStart(2, '0')}
+              </b>
+            )}
+            <button
+              type="button"
+              onClick={() => setComposerOpen(false)}
+              aria-label="Return to the room"
+            >
+              <X />
+            </button>
+          </div>
+        </div>
+
+        {founderTurn.status === 'awaiting' && founderTurn.question && (
+          <blockquote>{founderTurn.question}</blockquote>
+        )}
+
+        <Textarea
+          ref={responseInputRef}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter')
+              submitDraft();
+            if (event.key === 'Escape') setComposerOpen(false);
+          }}
+          placeholder={
+            founderTurn.status === 'awaiting'
+              ? `Answer ${waitingJudge?.name ?? 'the judge'}…`
+              : 'Continue your pitch…'
+          }
+          className="founder-composer-input"
+        />
+
+        <div className="founder-composer-footer">
+          <div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className={`rounded-full ${listening ? 'mic-live' : 'text-white/55 hover:bg-white/10 hover:text-white'}`}
+              onClick={toggleListening}
+              aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
+            >
+              {listening ? <MicOff /> : <Mic />}
+            </Button>
+            <span>{listening ? 'Listening…' : 'Voice or type'}</span>
+            <small>Ctrl/⌘ + Enter to send</small>
+          </div>
+          <Button
+            className="founder-composer-submit"
+            onClick={submitDraft}
+            disabled={!draft.trim()}
+          >
+            {founderTurn.status === 'awaiting'
+              ? `Answer ${waitingJudge?.name?.split(' ')[0] ?? 'judge'}`
+              : 'Add to pitch'}{' '}
+            <Send data-icon="inline-end" />
+          </Button>
+        </div>
+      </dialog>
+    ) : null;
+
+  const flowStatus =
+    judgeRescue.status === 'offered'
+      ? 'Judge leaving · appeal window open'
+      : judgeRescue.status === 'awaiting'
+        ? 'Ten-second rescue · founder answering'
+        : founderTurn.status === 'presenting'
+          ? 'Judge speaking · click Respond when ready'
+          : founderTurn.status === 'awaiting'
+            ? 'Waiting for your answer'
+            : founderTurn.status === 'answered'
+              ? 'Answer received · agent evaluating'
+              : speakingJudge
+                ? 'Judge speaking'
+                : pitch.status === 'live'
+                  ? 'Room listening'
+                  : 'Room ready';
+
+  const utilityOverlay = utilityPanel ? (
+    <dialog
+      open
+      className={`arena-utility-panel arena-utility-${utilityPanel}`}
+      aria-label={
+        utilityPanel === 'activity'
+          ? 'Live WebMCP activity'
+          : utilityPanel === 'transcript'
+            ? 'Session transcript'
+            : 'Report an issue'
+      }
+    >
+      <header>
+        <div>
+          <span>
+            {utilityPanel === 'activity'
+              ? 'Live proof'
+              : utilityPanel === 'transcript'
+                ? 'Session record'
+                : 'Help improve the arena'}
+          </span>
+          <h2>
+            {utilityPanel === 'activity'
+              ? 'WebMCP activity'
+              : utilityPanel === 'transcript'
+                ? 'Pitch transcript'
+                : 'Report an issue'}
+          </h2>
+        </div>
+        <button onClick={() => setUtilityPanel(null)} aria-label="Close panel">
+          <X />
+        </button>
+      </header>
+      {utilityPanel === 'activity' ? (
+        <div className="arena-tool-events">
+          {toolEvents.length ? (
+            [...toolEvents].reverse().map((event) => (
+              <div key={event.id} className={`tool-event-${event.phase}`}>
+                <i />
+                <strong>{event.toolName.replaceAll('_', ' ')}</strong>
+                <span>{event.phase}</span>
+                <time>{new Date(event.createdAt).toLocaleTimeString()}</time>
+              </div>
+            ))
+          ) : (
+            <p>No calls yet. Activity appears when the visiting AI enters.</p>
+          )}
+        </div>
+      ) : utilityPanel === 'transcript' ? (
+        <>
+          <pre className="arena-transcript-copy">{sessionTranscript()}</pre>
+          <Button onClick={downloadTranscript}>
+            <Download data-icon="inline-start" /> Download transcript
+          </Button>
+        </>
+      ) : (
+        <>
+          <Textarea
+            value={issueDraft}
+            onChange={(event) => setIssueDraft(event.target.value)}
+            placeholder="What happened? What did you expect instead?"
+            className="arena-issue-input"
+          />
+          <p className="arena-issue-note">
+            Room code, difficulty, current gate, and recent tool activity will be
+            attached. Your pitch text is not included.
+          </p>
+          <Button onClick={openIssueReport} disabled={!issueDraft.trim()}>
+            <Bug data-icon="inline-start" /> Open issue report
+          </Button>
+        </>
+      )}
+    </dialog>
+  ) : null;
+
   return (
     <main className="room-arena text-[#f6f2e9]">
       <div className="room-vignette" aria-hidden="true" />
+      {(composerOpen || pitch.status === 'final' || utilityPanel) && (
+        <div className="arena-modal-backdrop" aria-hidden="true" />
+      )}
       <header className="room-header">
         <div className="room-brand">
           <div className="brand-mark">
@@ -1838,9 +2482,9 @@ export function PitchArena() {
           >
             <span className="tool-dot" />
             {agentHost === 'bringmyai'
-              ? '11 tools + agent bridge'
+              ? '12 tools + agent bridge'
               : toolStatus === 'ready'
-                ? '11 site tools live'
+                ? '12 site tools live'
                 : 'Site tools in Codex / ChatGPT'}
           </span>
           <span
@@ -1850,6 +2494,15 @@ export function PitchArena() {
             <AudioLines className="size-3.5 text-[#ffc857]" />
             Room {roomCode}
           </span>
+          {recordingSession && (
+            <button
+              type="button"
+              className="recording-pill"
+              onClick={stopSessionRecording}
+            >
+              <i /> Recording · stop
+            </button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -1915,6 +2568,36 @@ export function PitchArena() {
               >
                 <Trophy /> Leaderboard
               </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() => setUtilityPanel('activity')}
+              >
+                <Activity /> Live WebMCP activity
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() => setUtilityPanel('transcript')}
+              >
+                <FileText /> Session transcript
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() =>
+                  recordingSession
+                    ? stopSessionRecording()
+                    : void startSessionRecording()
+                }
+              >
+                {recordingSession ? <CircleStop /> : <Video />}{' '}
+                {recordingSession ? 'Stop recording' : 'Record this session'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10" />
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() => setUtilityPanel('report')}
+              >
+                <Bug /> Report an issue
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1929,6 +2612,8 @@ export function PitchArena() {
         className={`room-stage room-${pitch.status} ${pendingEvidenceCount > 0 && pitch.status === 'live' ? 'room-evidence-pending' : ''}`}
       >
         {focusedJudgeOverlay}
+        {founderComposerOverlay}
+        {utilityOverlay}
         <div className="judge-monitor-grid">
           <div className="room-title">
             <p>
@@ -1960,6 +2645,12 @@ export function PitchArena() {
               <strong>{formatClock(pitch.secondsLeft)}</strong>
               <small>Time remaining</small>
             </div>
+            {pitch.status !== 'lobby' && (
+              <div className="room-mode-pills">
+                <span>{pitch.equity <= 0 ? 'Competition mode' : 'Investment mode'}</span>
+                <span>{DIFFICULTY_META[pitch.difficulty].label}</span>
+              </div>
+            )}
           </div>
           {JUDGES.map((judge) => {
             const reaction = reactions[judge.id];
@@ -1973,7 +2664,7 @@ export function PitchArena() {
               <article
                 key={judge.id}
                 data-judge={judge.id}
-                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''} ${isActiveTurn ? 'monitor-active-turn' : ''} ${focusedJudgeId === judge.id ? 'monitor-focused-away' : ''}`}
+                className={`judge-monitor ${reaction.state === 'out' ? 'monitor-out' : ''} ${reaction.state === 'out' && judgeRescue.judgeId === judge.id && ['offered', 'awaiting', 'answered'].includes(judgeRescue.status) ? 'monitor-rescue-pending' : ''} ${reaction.state === 'bidding' ? 'monitor-bidding' : ''} ${speakingJudge === judge.id ? 'monitor-speaking' : ''} ${isActiveTurn ? 'monitor-active-turn' : ''} ${focusedJudgeId === judge.id ? 'monitor-focused-away' : ''}`}
                 style={{ '--judge-color': judge.color } as React.CSSProperties}
               >
                 <div className="monitor-bezel">
@@ -2115,6 +2806,9 @@ export function PitchArena() {
                     <i key={index} />
                   ))}
                 </div>
+                {pitch.status !== 'lobby' && (
+                  <output className="arena-flow-status">{flowStatus}</output>
+                )}
               </div>
               {pitch.status === 'lobby' ? (
                 <div className="opening-pitch-form">
@@ -2127,6 +2821,37 @@ export function PitchArena() {
                       straight to your selected agent; Codex uses a one-click
                       copy handoff.
                     </p>
+                  </div>
+                  <div className="difficulty-picker" aria-label="Pitch difficulty">
+                    <div>
+                      <span>Practice difficulty</span>
+                      <small>
+                        {DIFFICULTY_META[pitch.difficulty].description}
+                      </small>
+                    </div>
+                    <fieldset aria-label="Choose difficulty">
+                      {(Object.keys(DIFFICULTY_META) as PitchDifficulty[]).map(
+                        (difficulty) => (
+                          <button
+                            key={difficulty}
+                            type="button"
+                            className={
+                              pitch.difficulty === difficulty
+                                ? 'difficulty-active'
+                                : ''
+                            }
+                            onClick={() =>
+                              setPitch((current) => ({
+                                ...current,
+                                difficulty,
+                              }))
+                            }
+                          >
+                            {DIFFICULTY_META[difficulty].label}
+                          </button>
+                        ),
+                      )}
+                    </fieldset>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <Input
@@ -2235,6 +2960,23 @@ export function PitchArena() {
                           : `Raised ${money(pitch.amountRaised ?? 0)}`}
                       </b>
                       <span>{formatClock(pitch.durationSeconds ?? 0)}</span>
+                    </div>
+                    <div className="arena-final-actions">
+                      <Button onClick={() => void shareSession()}>
+                        <Share2 data-icon="inline-start" /> Share result
+                      </Button>
+                      <Button variant="outline" onClick={downloadTranscript}>
+                        <Download data-icon="inline-start" /> Transcript
+                      </Button>
+                      <Button variant="outline" onClick={resetPitch}>
+                        <RotateCcw data-icon="inline-start" /> Pitch again
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setUtilityPanel('report')}
+                      >
+                        <Bug data-icon="inline-start" /> Report issue
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2400,23 +3142,6 @@ export function PitchArena() {
                       enters.
                     </div>
                   )}
-                  {founderTurn.status === 'awaiting' && (
-                    <div className="founder-response-gate">
-                      <div>
-                        <strong>
-                          {waitingJudge?.name ?? 'A judge'} is waiting
-                        </strong>
-                        <span>{founderTurn.question}</span>
-                      </div>
-                      <b>
-                        {String(Math.floor(responseSecondsLeft / 60)).padStart(
-                          2,
-                          '0',
-                        )}
-                        :{String(responseSecondsLeft % 60).padStart(2, '0')}
-                      </b>
-                    </div>
-                  )}
                   <div className="pitch-dialogue-feed" aria-live="polite">
                     {founderFeed.length === 0 ? (
                       <p className="feed-empty">
@@ -2440,53 +3165,25 @@ export function PitchArena() {
                       ))
                     )}
                   </div>
-                  <Textarea
-                    ref={responseInputRef}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        (event.ctrlKey || event.metaKey) &&
-                        event.key === 'Enter'
-                      )
-                        submitDraft();
-                    }}
-                    placeholder={
-                      founderTurn.status === 'awaiting'
-                        ? `Answer ${waitingJudge?.name ?? 'the judge'}…`
-                        : 'Continue your pitch… metrics, customers, moat, the ask.'
-                    }
-                    className="min-h-14 resize-none border-0 bg-transparent text-sm text-white placeholder:text-white/30 focus-visible:ring-0"
-                  />
-                  <div className="flex items-center justify-between gap-3 border-t border-white/8 px-2 pt-3">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className={`rounded-full ${listening ? 'mic-live' : 'text-white/55 hover:bg-white/10 hover:text-white'}`}
-                        onClick={toggleListening}
-                        aria-label={
-                          listening ? 'Stop listening' : 'Pitch by voice'
-                        }
-                      >
-                        {listening ? <MicOff /> : <Mic />}
-                      </Button>
-                      <span className="text-xs text-white/35">
-                        {listening ? 'Listening…' : 'Voice or type'}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="bg-white text-black hover:bg-white/80"
-                      onClick={submitDraft}
-                      disabled={!draft.trim()}
-                    >
+                  <button
+                    type="button"
+                    className={`founder-compose-trigger ${founderTurn.status === 'awaiting' ? 'founder-compose-trigger-waiting' : ''}`}
+                    onClick={() => setComposerOpen(true)}
+                    disabled={founderTurn.status === 'presenting'}
+                  >
+                    <span>
                       {founderTurn.status === 'awaiting'
-                        ? `Answer ${waitingJudge?.name?.split(' ')[0] ?? 'judge'}`
-                        : 'Add to pitch'}{' '}
-                      <Send data-icon="inline-end" />
-                    </Button>
-                  </div>
+                        ? `${waitingJudge?.name ?? 'A judge'} is waiting`
+                        : 'Your response'}
+                    </span>
+                    <strong>
+                      {draft.trim() ||
+                        (founderTurn.status === 'awaiting'
+                          ? 'Open the stage to answer…'
+                          : 'Open the stage to speak or type…')}
+                    </strong>
+                    <ArrowUpRight />
+                  </button>
                 </div>
               )}
             </div>
