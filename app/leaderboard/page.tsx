@@ -1,6 +1,12 @@
 /* oxlint-disable next/no-html-link-for-pages -- Vinext client routing is bypassed intentionally for reliable hard navigation. */
 import type { Metadata } from 'next';
-import { ArrowLeft, AudioLines, Clock3, Trophy } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  AudioLines,
+  Clock3,
+  Trophy,
+} from 'lucide-react';
 
 import { listLeaderboard } from '@/db/leaderboard';
 
@@ -121,6 +127,7 @@ export default async function LeaderboardPage() {
                       <Clock3 className="size-3.5" /> Duration
                     </th>
                     <th>Date</th>
+                    <th>Replay</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,7 +139,13 @@ export default async function LeaderboardPage() {
                         </span>
                       </td>
                       <td>
-                        <strong>{entry.companyName}</strong>
+                        <a
+                          className="leaderboard-pitch-link"
+                          href={`/leaderboard/${entry.id}`}
+                          aria-label={`Open ${entry.companyName} pitch record`}
+                        >
+                          <strong>{entry.companyName}</strong>
+                        </a>
                       </td>
                       <td>{entry.founderName}</td>
                       <td>
@@ -150,6 +163,15 @@ export default async function LeaderboardPage() {
                           day: 'numeric',
                           year: 'numeric',
                         }).format(new Date(entry.createdAt))}
+                      </td>
+                      <td>
+                        <a
+                          className="leaderboard-open-link"
+                          href={`/leaderboard/${entry.id}`}
+                          aria-label={`Open ${entry.companyName} pitch record`}
+                        >
+                          Open pitch <ArrowUpRight />
+                        </a>
                       </td>
                     </tr>
                   ))}

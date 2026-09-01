@@ -29,6 +29,13 @@
       "when": 1788273900000,
       "tag": "0003_clear_demo_leaderboard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788298785063,
+      "tag": "0004_crazy_molly_hayes",
+      "breakpoints": true
     }
   ]
 }

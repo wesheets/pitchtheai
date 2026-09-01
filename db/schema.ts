@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const leaderboard = sqliteTable('leaderboard', {
   id: text('id').primaryKey(),
@@ -7,7 +7,14 @@ export const leaderboard = sqliteTable('leaderboard', {
   score: integer('score').notNull(),
   amountRaised: integer('amount_raised').notNull().default(0),
   askAmount: integer('ask_amount').notNull().default(0),
+  equity: real('equity').notNull().default(0),
   durationSeconds: integer('duration_seconds').notNull().default(0),
+  difficulty: text('difficulty').notNull().default('medium'),
+  openingPitch: text('opening_pitch').notNull().default(''),
+  transcript: text('transcript').notNull().default(''),
+  verdictSummary: text('verdict_summary').notNull().default(''),
+  toolCalls: text('tool_calls').notNull().default('[]'),
+  founderPhotoMaterialId: text('founder_photo_material_id'),
   createdAt: integer('created_at').notNull(),
 });
 

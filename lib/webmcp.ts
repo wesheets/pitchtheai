@@ -27,6 +27,7 @@ type PitchSnapshot = {
     companyName: string;
     askAmount: number;
     equity: number;
+    openingPitch: string;
     transcript: string;
     status: 'lobby' | 'live' | 'final';
     round: number;
@@ -645,7 +646,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'wait_for_judge_rescue',
       description:
-        "Wait while an out judge hangs halfway above the room. The founder may click “Wait, don't go!”, then gets exactly ten seconds to give one concrete reason the judge should stay. If answered, the same judge must respond next with post_judge_turn and may return to pressing/listening or say no and remain out. Never invent the appeal and never let another judge speak while this gate is open.",
+        "Wait while an out judge hangs halfway above the room. The founder has twenty seconds to click “Wait, don't go!” and, after clicking, twenty seconds to give one concrete reason the judge should stay. If answered, the same judge must respond next with post_judge_turn and may return to pressing/listening or say no and remain out. Never invent the appeal and never let another judge speak while this gate is open.",
       inputSchema: {
         type: 'object',
         properties: {},

@@ -1,7 +1,19 @@
-import { listLeaderboard, saveLeaderboardEntry } from '@/db/leaderboard';
+import {
+  getLeaderboardEntry,
+  listLeaderboard,
+  saveLeaderboardEntry,
+  type StoredToolCall,
+} from '@/db/leaderboard';
 
 export async function GET(request: Request) {
   try {
+    const id = new URL(request.url).searchParams.get('id');
+    if (id) {
+      const entry = await getLeaderboardEntry(id);
+      return entry
+        ? Response.json({ entry })
+        : Response.json({ error: 'Pitch not found' }, { status: 404 });
+    }
     const limit = Math.max(
       1,
       Math.min(
@@ -40,7 +52,22 @@ export async function POST(request: Request) {
       score: Number(body.score),
       amountRaised: Number(body.amountRaised),
       askAmount: Number(body.askAmount),
+      equity: Number(body.equity),
       durationSeconds: Number(body.durationSeconds) || 0,
+      difficulty:
+        typeof body.difficulty === 'string' ? body.difficulty : 'medium',
+      openingPitch:
+        typeof body.openingPitch === 'string' ? body.openingPitch : '',
+      transcript: typeof body.transcript === 'string' ? body.transcript : '',
+      verdictSummary:
+        typeof body.verdictSummary === 'string' ? body.verdictSummary : '',
+      toolCalls: Array.isArray(body.toolCalls)
+        ? (body.toolCalls as StoredToolCall[])
+        : [],
+      founderPhotoMaterialId:
+        typeof body.founderPhotoMaterialId === 'string'
+          ? body.founderPhotoMaterialId
+          : undefined,
     });
     return Response.json({ entry }, { status: 201 });
   } catch (error) {

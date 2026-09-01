@@ -107,6 +107,10 @@ export type LeaderboardEntry = {
   durationSeconds: number;
   createdAt: number;
 };
+export type WebMcpToolCall = {
+  name: string;
+  count: number;
+};
 export type PitchMaterial = {
   id: string;
   name: string;
@@ -170,6 +174,15 @@ type ArenaToolEvent = {
   phase: 'called' | 'complete' | 'error';
   createdAt: number;
 };
+
+function summarizeToolCalls(events: ArenaToolEvent[]): WebMcpToolCall[] {
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    if (event.phase !== 'called') continue;
+    counts.set(event.toolName, (counts.get(event.toolName) ?? 0) + 1);
+  }
+  return [...counts].map(([name, count]) => ({ name, count }));
+}
 export type PanelMood =
   | 'skeptical'
   | 'surprised'
@@ -183,6 +196,7 @@ type PitchState = {
   companyName: string;
   askAmount: number;
   equity: number;
+  openingPitch: string;
   transcript: string;
   status: PitchStatus;
   round: number;
@@ -274,6 +288,7 @@ const DEFAULT_PITCH: PitchState = {
   companyName: '',
   askAmount: 0,
   equity: 0,
+  openingPitch: '',
   transcript: '',
   status: 'lobby',
   round: 0,
@@ -290,22 +305,22 @@ const DIFFICULTY_META: Record<
 > = {
   easy: {
     label: 'Easy',
-    responseSeconds: 60,
+    responseSeconds: 90,
     description: 'Coaching room · generous follow-ups',
   },
   medium: {
     label: 'Medium',
-    responseSeconds: 45,
+    responseSeconds: 75,
     description: 'Balanced room · honest pressure',
   },
   hard: {
     label: 'Hard',
-    responseSeconds: 30,
+    responseSeconds: 60,
     description: 'Sharper questions · stricter scoring',
   },
   legendary: {
     label: 'Legendary',
-    responseSeconds: 20,
+    responseSeconds: 45,
     description: 'No mercy · proof or perish',
   },
 };
@@ -591,6 +606,7 @@ export function PitchArena() {
   >('off');
   const [cameraMode, setCameraMode] = useState<'photo' | 'live' | null>(null);
   const [cameraMessage, setCameraMessage] = useState('');
+  const [publishFounderPhoto, setPublishFounderPhoto] = useState(false);
   const [handoffStatus, setHandoffStatus] = useState<
     'idle' | 'requesting' | 'waiting' | 'connected' | 'error'
   >('idle');
@@ -638,6 +654,9 @@ export function PitchArena() {
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundtrackStopRef = useRef<(() => void) | null>(null);
+  const heartbeatStopRef = useRef<(() => void) | null>(null);
+  const toolEventsRef = useRef<ArenaToolEvent[]>([]);
+  const publishFounderPhotoRef = useRef(false);
   const twoMinuteWarningRef = useRef(false);
   const voiceAbortRef = useRef<AbortController | null>(null);
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -705,6 +724,9 @@ export function PitchArena() {
   useEffect(() => {
     leaderboardRef.current = leaderboard;
   }, [leaderboard]);
+  useEffect(() => {
+    publishFounderPhotoRef.current = publishFounderPhoto;
+  }, [publishFounderPhoto]);
   useEffect(() => {
     materialsRef.current = materials;
   }, [materials]);
@@ -798,12 +820,10 @@ export function PitchArena() {
   }, [enableMusic]);
 
   const activeSoundtrack =
-    launchCount !== null
-      ? 'cinematic'
-      : pitch.status === 'live' &&
-          (founderTurn.status === 'awaiting' || pitch.secondsLeft <= 120)
-        ? 'heartbeat'
-        : pitch.soundtrack;
+    launchCount !== null ? 'cinematic' : pitch.soundtrack;
+  const heartbeatActive =
+    pitch.status === 'live' &&
+    (founderTurn.status === 'awaiting' || pitch.secondsLeft <= 120);
 
   useEffect(() => {
     soundtrackStopRef.current?.();
@@ -817,6 +837,19 @@ export function PitchArena() {
       soundtrackStopRef.current = null;
     };
   }, [activeSoundtrack, musicLevel, musicOn]);
+
+  useEffect(() => {
+    heartbeatStopRef.current?.();
+    heartbeatStopRef.current = null;
+    const context = audioContextRef.current;
+    if (!musicOn || !context || !heartbeatActive) return;
+    const stop = startSoundtrack(context, 'heartbeat', musicLevel * 0.38);
+    heartbeatStopRef.current = stop;
+    return () => {
+      stop();
+      heartbeatStopRef.current = null;
+    };
+  }, [heartbeatActive, musicLevel, musicOn]);
 
   const fetchLeaderboard = useCallback(async () => {
     try {
@@ -951,6 +984,7 @@ export function PitchArena() {
       const nextPitch: PitchState = {
         ...DEFAULT_PITCH,
         ...next,
+        openingPitch,
         transcript: openingPitch,
         status: 'live',
         round: 0,
@@ -1108,6 +1142,9 @@ export function PitchArena() {
     setCounterEquity('');
     setCounterNote('');
     setDraft('');
+    setPublishFounderPhoto(false);
+    toolEventsRef.current = [];
+    setToolEvents([]);
     setFocusedJudgeId(null);
     setComposerOpen(false);
     setFeed([]);
@@ -1124,6 +1161,8 @@ export function PitchArena() {
     twoMinuteWarningRef.current = false;
     soundtrackStopRef.current?.();
     soundtrackStopRef.current = null;
+    heartbeatStopRef.current?.();
+    heartbeatStopRef.current = null;
     setMusicOn(false);
     if (responseWaiterRef.current) {
       window.clearTimeout(responseWaiterRef.current.timer);
@@ -1233,7 +1272,7 @@ export function PitchArena() {
           status: 'offered',
           judgeId: reaction.judgeId,
           outReason: reaction.outReason ?? reaction.spoken,
-          deadline: Date.now() + 12_000,
+          deadline: Date.now() + 20_000,
         };
         judgeRescueRef.current = offeredRescue;
         setJudgeRescue(offeredRescue);
@@ -1310,11 +1349,11 @@ export function PitchArena() {
     if (rescue.status !== 'offered' || !rescue.judgeId) return;
     appealedJudgeIdsRef.current.add(rescue.judgeId);
     const judge = JUDGES.find((item) => item.id === rescue.judgeId);
-    const question = `Give ${judge?.name ?? 'this judge'} one concrete reason to stay. You have ten seconds.`;
+    const question = `Give ${judge?.name ?? 'this judge'} one concrete reason to stay. You have twenty seconds.`;
     const awaitingRescue: JudgeRescueState = {
       ...rescue,
       status: 'awaiting',
-      deadline: Date.now() + 10_000,
+      deadline: Date.now() + 20_000,
     };
     const awaitingTurn: FounderTurnState = {
       status: 'awaiting',
@@ -1326,7 +1365,7 @@ export function PitchArena() {
     founderTurnRef.current = awaitingTurn;
     setJudgeRescue(awaitingRescue);
     setFounderTurn(awaitingTurn);
-    setResponseSecondsLeft(10);
+    setResponseSecondsLeft(20);
     setFocusedJudgeId(null);
     setComposerOpen(true);
   }, []);
@@ -1435,13 +1474,13 @@ export function PitchArena() {
           appendFeed({
             kind: 'system',
             author: 'Arena',
-            text: 'Ten seconds gone. The judge is out.',
+            text: 'Twenty seconds gone. The judge is out.',
           });
         }
         finish({
           status: timedOut.status,
           judgeId: latest.judgeId,
-          waitedSeconds: latest.status === 'awaiting' ? 10 : 12,
+          waitedSeconds: 20,
         });
       };
       const timer = window.setInterval(check, 120);
@@ -1983,6 +2022,13 @@ export function PitchArena() {
       };
       setPitch(finalPitch);
       try {
+        const founderPhotoMaterialId = publishFounderPhotoRef.current
+          ? [...materialsRef.current]
+              .reverse()
+              .find((material) =>
+                material.name.startsWith('founder-readiness-'),
+              )?.id
+          : undefined;
         await fetch('/api/leaderboard', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -1992,7 +2038,16 @@ export function PitchArena() {
             score: finalPitch.score,
             amountRaised: finalPitch.amountRaised,
             askAmount: finalPitch.askAmount,
+            equity: finalPitch.equity,
             durationSeconds: finalPitch.durationSeconds,
+            difficulty: finalPitch.difficulty,
+            openingPitch: finalPitch.openingPitch,
+            transcript: feedRef.current
+              .map((entry) => `${entry.author.toUpperCase()}\n${entry.text}`)
+              .join('\n\n'),
+            verdictSummary: finalPitch.summary,
+            toolCalls: summarizeToolCalls(toolEventsRef.current),
+            founderPhotoMaterialId,
           }),
         });
         await fetchLeaderboard();
@@ -2056,10 +2111,14 @@ export function PitchArena() {
       finalizePitch,
       fetchLeaderboard,
       onStatus: setToolStatus,
-      onToolEvent: (event) =>
-        setToolEvents((current) =>
-          [...current, { ...event, id: crypto.randomUUID() }].slice(-40),
-        ),
+      onToolEvent: (event) => {
+        const nextEvents = [
+          ...toolEventsRef.current,
+          { ...event, id: crypto.randomUUID() },
+        ].slice(-200);
+        toolEventsRef.current = nextEvents;
+        setToolEvents(nextEvents);
+      },
     });
     return unregister;
   }, [
@@ -2107,7 +2166,7 @@ export function PitchArena() {
     appendFeed({
       kind: 'system',
       author: 'Arena',
-      text: 'Two minutes remain. The music cuts. Heartbeat only.',
+      text: 'Two minutes remain. The heartbeat joins the score.',
     });
   }, [appendFeed, pitch.secondsLeft, pitch.status]);
 
@@ -2856,6 +2915,10 @@ export function PitchArena() {
         .find((material) => material.name.startsWith('founder-readiness-')),
     [materials],
   );
+  const finalToolCalls = useMemo(
+    () => summarizeToolCalls(toolEvents),
+    [toolEvents],
+  );
   const waitingJudge = founderTurn.judgeId
     ? JUDGES.find((judge) => judge.id === founderTurn.judgeId)
     : undefined;
@@ -3094,7 +3157,7 @@ export function PitchArena() {
             : judgeRescue.status === 'offered'
               ? 'Judge leaving · appeal window open'
               : judgeRescue.status === 'awaiting'
-                ? 'Ten-second rescue · founder answering'
+                ? 'Twenty-second rescue · founder answering'
                 : founderTurn.status === 'presenting'
                   ? 'Judge speaking · click Respond when ready'
                   : founderTurn.status === 'awaiting'
@@ -3290,6 +3353,8 @@ export function PitchArena() {
               if (musicOn) {
                 soundtrackStopRef.current?.();
                 soundtrackStopRef.current = null;
+                heartbeatStopRef.current?.();
+                heartbeatStopRef.current = null;
                 window.sessionStorage.setItem('pitchtheai:music', 'off');
                 setMusicOn(false);
               } else {
@@ -3862,12 +3927,42 @@ export function PitchArena() {
                       </b>
                       <span>{formatClock(pitch.durationSeconds ?? 0)}</span>
                     </div>
+                    {finalToolCalls.length > 0 && (
+                      <section className="arena-final-tools">
+                        <header>
+                          <Activity />
+                          <span>WebMCP receipt</span>
+                          <b>
+                            {finalToolCalls.reduce(
+                              (total, item) => total + item.count,
+                              0,
+                            )}{' '}
+                            calls
+                          </b>
+                        </header>
+                        <div>
+                          {finalToolCalls.map((item) => (
+                            <span key={item.name}>
+                              {item.name} <b>×{item.count}</b>
+                            </span>
+                          ))}
+                        </div>
+                      </section>
+                    )}
                     <div className="arena-final-actions">
                       <Button onClick={() => void shareSession()}>
                         <Share2 data-icon="inline-start" /> Share result
                       </Button>
                       <Button variant="outline" onClick={downloadTranscript}>
                         <Download data-icon="inline-start" /> Transcript
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          window.location.href = '/leaderboard';
+                        }}
+                      >
+                        <Trophy data-icon="inline-start" /> Leaderboard
                       </Button>
                       <Button variant="outline" onClick={resetPitch}>
                         <RotateCcw data-icon="inline-start" /> Pitch again
@@ -4130,6 +4225,8 @@ export function PitchArena() {
                   if (musicOn) {
                     soundtrackStopRef.current?.();
                     soundtrackStopRef.current = null;
+                    heartbeatStopRef.current?.();
+                    heartbeatStopRef.current = null;
                     window.sessionStorage.setItem('pitchtheai:music', 'off');
                     setMusicOn(false);
                   } else void enableMusic();
@@ -4240,6 +4337,20 @@ export function PitchArena() {
                     />
                   </label>
                 </div>
+                <label className="founder-photo-public">
+                  <input
+                    type="checkbox"
+                    checked={publishFounderPhoto}
+                    disabled={!founderPhoto}
+                    onChange={(event) =>
+                      setPublishFounderPhoto(event.target.checked)
+                    }
+                  />
+                  <span>
+                    Show this photo on my public leaderboard record
+                    <small>Off by default. Judges can still review it.</small>
+                  </span>
+                </label>
                 <div className="founder-video-actions">
                   <button
                     type="button"

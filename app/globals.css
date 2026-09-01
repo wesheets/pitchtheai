@@ -3247,6 +3247,40 @@ textarea {
   color: #080705;
   background: #ffc857;
 }
+.founder-photo-public {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.42rem;
+  cursor: pointer;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 7px;
+  padding: 0.42rem;
+  color: rgb(255 255 255 / 0.62);
+  background: rgb(255 255 255 / 0.025);
+  font-size: 7px;
+  line-height: 1.35;
+}
+.founder-photo-public input {
+  margin-top: 0.05rem;
+  accent-color: #ffc857;
+}
+.founder-photo-public span,
+.founder-photo-public small {
+  display: block;
+}
+.founder-photo-public small {
+  margin-top: 0.12rem;
+  color: rgb(255 255 255 / 0.3);
+  font-size: 6px;
+}
+.founder-photo-public:has(input:checked) {
+  border-color: rgb(255 199 87 / 0.35);
+  color: #ffc857;
+}
+.founder-photo-public:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .founder-camera-actions svg,
 .founder-video-actions svg {
   width: 12px;
@@ -3397,6 +3431,329 @@ textarea {
     width: min(230px, calc(100vw - 16px));
   }
 }
+
+/* Public pitch receipt */
+.pitch-record-page {
+  min-height: 100svh;
+  padding-bottom: 5rem;
+}
+.pitch-record-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding-top: clamp(2.5rem, 6vh, 5rem);
+}
+.pitch-record-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.pitch-record-hero p {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #ffc857;
+  font: 800 11px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.pitch-record-hero p svg {
+  width: 15px;
+  height: 15px;
+}
+.pitch-record-hero h1 {
+  margin-top: 0.55rem;
+  color: #fff;
+  font-size: clamp(48px, 8vw, 100px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.07em;
+  text-shadow: 0 12px 40px #000;
+}
+.pitch-record-hero > div:first-child > span {
+  display: block;
+  margin-top: 0.8rem;
+  color: rgb(255 255 255 / 0.58);
+  font-size: 18px;
+}
+.pitch-record-score {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  flex: 0 0 auto;
+}
+.pitch-record-score span {
+  grid-column: 1 / -1;
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.pitch-record-score strong {
+  color: #ffc857;
+  font: 900 clamp(72px, 10vw, 126px) / 0.76 var(--font-geist-sans);
+  letter-spacing: -0.08em;
+  text-shadow: 0 0 40px rgb(255 193 72 / 0.3);
+}
+.pitch-record-score small {
+  margin: 0 0 0.15rem 0.3rem;
+  color: rgb(255 255 255 / 0.35);
+  font: 700 14px var(--font-geist-mono);
+}
+.pitch-record-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 2rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 199 87 / 0.25);
+  border-radius: 18px;
+  background: rgb(2 3 5 / 0.9);
+}
+.pitch-record-stats > div {
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+  padding: 1.15rem 1.25rem;
+}
+.pitch-record-stats > div:last-child {
+  border-right: 0;
+}
+.pitch-record-stats span,
+.pitch-record-section > span,
+.pitch-record-founder > span {
+  display: block;
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+.pitch-record-stats strong {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  color: #fff;
+  font-size: 18px;
+}
+.pitch-record-stats svg {
+  width: 16px;
+  height: 16px;
+}
+.pitch-record-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.pitch-record-founder,
+.pitch-record-section,
+.pitch-record-legacy {
+  border: 1px solid rgb(255 199 87 / 0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgb(15 13 9 / 0.95), rgb(2 4 7 / 0.97));
+  box-shadow: 0 26px 70px #000;
+}
+.pitch-record-founder {
+  height: fit-content;
+  padding: 1rem;
+}
+.pitch-record-founder img,
+.pitch-record-founder > div {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  margin-top: 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 13px;
+  object-fit: cover;
+  background: #050609;
+}
+.pitch-record-founder > div {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 1rem;
+  color: rgb(255 255 255 / 0.35);
+  text-align: center;
+}
+.pitch-record-founder > div svg {
+  width: 44px;
+  height: 44px;
+  color: #ffc857;
+  opacity: 0.55;
+}
+.pitch-record-founder > div p {
+  margin-top: 0.7rem;
+  color: rgb(255 255 255 / 0.62);
+  font-size: 13px;
+}
+.pitch-record-founder > div small {
+  margin-top: 0.3rem;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.pitch-record-founder > strong {
+  display: block;
+  margin-top: 0.8rem;
+  color: #fff;
+  font-size: 19px;
+}
+.pitch-record-content {
+  display: grid;
+  gap: 1rem;
+}
+.pitch-record-section {
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+.pitch-record-section h2 {
+  margin-top: 0.35rem;
+  color: #fff;
+  font-size: clamp(24px, 3vw, 38px);
+  font-weight: 850;
+  letter-spacing: -0.04em;
+}
+.pitch-record-verdict blockquote {
+  margin-top: 1rem;
+  color: rgb(255 255 255 / 0.84);
+  font-size: clamp(17px, 2vw, 23px);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.pitch-record-section pre {
+  margin-top: 1rem;
+  color: rgb(255 255 255 / 0.74);
+  font: 15px/1.7 var(--font-geist-sans);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pitch-record-tools > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.pitch-record-tools > div > b {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 999px;
+  padding: 0.48rem 0.7rem;
+  color: rgb(255 255 255 / 0.68);
+  background: rgb(255 255 255 / 0.035);
+  font: 650 12px var(--font-geist-mono);
+}
+.pitch-record-tools > div strong {
+  color: #ffc857;
+}
+.pitch-record-legacy {
+  display: flex;
+  gap: 0.8rem;
+  padding: 1.1rem;
+  color: rgb(255 255 255 / 0.5);
+}
+.pitch-record-legacy > svg {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: #ffc857;
+}
+.pitch-record-legacy strong {
+  color: #fff;
+  font-size: 16px;
+}
+.pitch-record-legacy p {
+  margin-top: 0.25rem;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pitch-record-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+.pitch-record-footer a,
+.pitch-record-missing a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgb(255 199 87 / 0.28);
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  color: #ffc857;
+  background: rgb(0 0 0 / 0.55);
+  font-size: 13px;
+  font-weight: 750;
+}
+.pitch-record-footer svg,
+.pitch-record-missing a svg {
+  width: 15px;
+  height: 15px;
+}
+.pitch-record-footer a:hover,
+.pitch-record-missing a:hover {
+  color: #050505;
+  background: #ffc857;
+}
+.pitch-record-missing {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 100svh;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+.pitch-record-missing > svg {
+  width: 42px;
+  height: 42px;
+  color: #ffc857;
+}
+.pitch-record-missing h1 {
+  margin-top: 1rem;
+  color: #fff;
+  font-size: 38px;
+}
+.pitch-record-missing p {
+  margin: 0.5rem 0 1rem;
+  color: rgb(255 255 255 / 0.52);
+}
+@media (max-width: 760px) {
+  .pitch-record-shell {
+    width: min(100% - 24px, 1180px);
+  }
+  .pitch-record-hero {
+    align-items: start;
+  }
+  .pitch-record-score strong {
+    font-size: 64px;
+  }
+  .pitch-record-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pitch-record-stats > div:nth-child(2) {
+    border-right: 0;
+  }
+  .pitch-record-stats > div:nth-child(-n + 2) {
+    border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  }
+  .pitch-record-grid {
+    grid-template-columns: 1fr;
+  }
+  .pitch-record-founder {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .pitch-record-founder > span {
+    grid-column: 1 / -1;
+  }
+  .pitch-record-founder img,
+  .pitch-record-founder > div {
+    margin-top: 0;
+  }
+  .pitch-record-footer {
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+}
 .room-evidence-tray {
   margin-top: 0.45rem;
   border-radius: 9px;
@@ -3529,6 +3886,44 @@ textarea {
 }
 .arena-final-copy b {
   color: #ffc857;
+}
+.arena-final-tools {
+  margin-top: 1rem;
+  border: 1px solid rgb(255 199 87 / 0.18);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: rgb(0 0 0 / 0.3);
+}
+.arena-final-tools header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.arena-final-tools header svg {
+  width: 14px;
+  height: 14px;
+}
+.arena-final-tools header b {
+  margin-left: auto;
+  color: rgb(255 255 255 / 0.5);
+}
+.arena-final-tools > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+.arena-final-tools > div > span {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 999px;
+  padding: 0.28rem 0.48rem;
+  color: rgb(255 255 255 / 0.65);
+  background: rgb(255 255 255 / 0.03);
+  font: 650 9px var(--font-geist-mono);
 }
 .arena-final-actions {
   display: flex !important;
@@ -3848,7 +4243,7 @@ textarea {
   display: grid;
 }
 .leaderboard-brand strong {
-  font: 700 18px var(--font-geist-sans);
+  font: 750 20px var(--font-geist-sans);
   letter-spacing: -0.02em;
 }
 .leaderboard-brand small {
@@ -3866,7 +4261,7 @@ textarea {
   padding: 0.55rem 0.9rem;
   color: rgb(255 255 255 / 0.65);
   background: rgb(0 0 0 / 0.44);
-  font-size: 11px;
+  font-size: 14px;
   transition: 0.2s ease;
 }
 .leaderboard-back:hover {
@@ -3888,7 +4283,7 @@ textarea {
   align-items: center;
   gap: 0.45rem;
   color: #ffc857;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -3906,7 +4301,8 @@ textarea {
   display: block;
   margin-top: 1rem;
   color: rgb(255 255 255 / 0.52);
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1.55;
 }
 .leaderboard-card {
   margin-top: clamp(2rem, 5vh, 4.5rem);
@@ -3927,7 +4323,7 @@ textarea {
 }
 .leaderboard-card-topline > div {
   border-right: 1px solid rgb(255 255 255 / 0.08);
-  padding: 1.1rem 1.35rem;
+  padding: 1.35rem 1.55rem;
 }
 .leaderboard-card-topline > div:last-child {
   border-right: 0;
@@ -3935,13 +4331,13 @@ textarea {
 .leaderboard-card-topline strong {
   display: block;
   color: #ffc857;
-  font: 700 23px var(--font-geist-mono);
+  font: 750 29px var(--font-geist-mono);
 }
 .leaderboard-card-topline span {
   display: block;
   margin-top: 0.15rem;
   color: rgb(255 255 255 / 0.34);
-  font-size: 8px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
 }
@@ -3950,13 +4346,13 @@ textarea {
 }
 .leaderboard-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
   border-collapse: collapse;
 }
 .leaderboard-table th {
-  padding: 0.8rem 1rem;
+  padding: 1rem 1.15rem;
   color: rgb(255 255 255 / 0.3);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   text-align: left;
   text-transform: uppercase;
@@ -3969,9 +4365,9 @@ textarea {
 }
 .leaderboard-table td {
   border-top: 1px solid rgb(255 255 255 / 0.06);
-  padding: 1rem;
+  padding: 1.2rem 1.15rem;
   color: rgb(255 255 255 / 0.6);
-  font-size: 12px;
+  font-size: 15px;
   white-space: nowrap;
 }
 .leaderboard-table tbody tr {
@@ -3982,15 +4378,15 @@ textarea {
 }
 .leaderboard-table td strong {
   color: white;
-  font-size: 13px;
+  font-size: 17px;
 }
 .leaderboard-table td b {
   color: #ffc857;
-  font: 700 18px var(--font-geist-mono);
+  font: 750 23px var(--font-geist-mono);
 }
 .leaderboard-table td small {
   color: rgb(255 255 255 / 0.25);
-  font-size: 8px;
+  font-size: 11px;
 }
 .leaderboard-raised {
   color: #77e0ac !important;
@@ -3999,12 +4395,38 @@ textarea {
 .leaderboard-rank {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 50%;
   color: rgb(255 255 255 / 0.48);
-  font: 10px var(--font-geist-mono);
+  font: 12px var(--font-geist-mono);
+}
+.leaderboard-pitch-link {
+  display: inline-flex;
+  color: #fff;
+}
+.leaderboard-pitch-link:hover {
+  color: #ffc857;
+}
+.leaderboard-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgb(255 199 87 / 0.28);
+  border-radius: 999px;
+  padding: 0.48rem 0.7rem;
+  color: #ffc857;
+  font-size: 13px;
+  font-weight: 750;
+}
+.leaderboard-open-link svg {
+  width: 14px;
+  height: 14px;
+}
+.leaderboard-open-link:hover {
+  color: #050505;
+  background: #ffc857;
 }
 .rank-1 {
   color: #ffc857;
