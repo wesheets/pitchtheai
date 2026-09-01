@@ -4829,6 +4829,7 @@ textarea {
   font-weight: 700;
   text-decoration: none;
 }
+.landing-stage-ribbon .landing-challenge-link:hover { color: #ffe298; }
 .landing-stage-ribbon svg { width: 0.95rem; }
 .landing-stage-ribbon p { margin: 0; text-align: center; }
 .landing-stage-stats {

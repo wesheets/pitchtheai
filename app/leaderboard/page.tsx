@@ -1,5 +1,5 @@
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client routing is bypassed intentionally for reliable hard navigation. */
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { ArrowLeft, AudioLines, Clock3, Trophy } from 'lucide-react';
 
 import { listLeaderboard } from '@/db/leaderboard';
@@ -38,7 +38,7 @@ export default async function LeaderboardPage() {
     <main className="leaderboard-page">
       <div className="leaderboard-vignette" aria-hidden="true" />
       <header className="leaderboard-header">
-        <Link href="/" className="leaderboard-brand">
+        <a href="/" className="leaderboard-brand">
           <span className="brand-mark">
             <AudioLines className="size-5" />
           </span>
@@ -46,10 +46,10 @@ export default async function LeaderboardPage() {
             <strong>PITCH THE AI</strong>
             <small>Four minds. One deal.</small>
           </span>
-        </Link>
-        <Link href="/" className="leaderboard-back">
+        </a>
+        <a href="/" className="leaderboard-back">
           <ArrowLeft className="size-4" /> Back to the arena
-        </Link>
+        </a>
       </header>
 
       <section className="leaderboard-shell">

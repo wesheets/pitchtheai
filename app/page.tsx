@@ -1,5 +1,5 @@
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client routing is bypassed intentionally for reliable hard navigation. */
 import type { CSSProperties } from 'react';
-import Link from 'next/link';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -78,7 +78,7 @@ export default function Home() {
     <main className="landing-page">
       <div className="landing-vignette" />
       <header className="landing-nav">
-        <Link className="landing-brand" href="/" aria-label="Pitch The AI home">
+        <a className="landing-brand" href="/" aria-label="Pitch The AI home">
           <span className="landing-brand-mark" aria-hidden="true">
             <i /><i /><i /><i /><i />
           </span>
@@ -86,12 +86,12 @@ export default function Home() {
             <strong>PITCH THE AI</strong>
             <small>Four minds. One deal.</small>
           </span>
-        </Link>
+        </a>
 
         <nav aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#judges">Judges</a>
-          <Link href="/leaderboard">Leaderboard</Link>
+          <a href="/leaderboard">Leaderboard</a>
           <a href="#faq">FAQ</a>
           <LandingSound />
           <div className="external-beta">
@@ -114,7 +114,7 @@ export default function Home() {
             </div>
           </div>
           <span className="landing-beta-badge">Beta</span>
-          <Link className="landing-nav-play" href="/play">Play now</Link>
+          <a className="landing-nav-play" href="/play">Play now</a>
         </nav>
       </header>
 
@@ -137,12 +137,12 @@ export default function Home() {
             Defend your vision. Win the deal—or get roasted.
           </p>
           <div className="landing-actions">
-            <Link className="landing-primary-cta" href="/play">
+            <a className="landing-primary-cta" href="/play">
               Play now <Zap />
-            </Link>
-            <Link className="landing-secondary-cta" href="/leaderboard">
+            </a>
+            <a className="landing-secondary-cta" href="/leaderboard">
               Leaderboard <Trophy />
-            </Link>
+            </a>
           </div>
           <div className="landing-proof">
             <div className="landing-proof-faces" aria-hidden="true">
@@ -169,7 +169,14 @@ export default function Home() {
 
       <section className="landing-stage-preview" id="how-it-works">
         <div className="landing-stage-ribbon">
-          <span><Globe2 /> Built for the WebMCP Challenge</span>
+          <a
+            className="landing-challenge-link"
+            href="https://openai.com/webmcp-challenge/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Globe2 /> Built for the WebMCP Challenge <ArrowUpRight />
+          </a>
           <p>Your browser AI runs the panel. You control every answer and every deal.</p>
           <a href="https://github.com/wesheets/pitchtheai" target="_blank" rel="noreferrer">
             <CodeXml /> MIT source <ArrowUpRight />
@@ -237,9 +244,9 @@ export default function Home() {
             <p>No. Response gates hold the panel until you answer or time out, and only you can accept, counter, or reject an offer.</p>
           </article>
         </div>
-        <Link className="landing-bottom-cta" href="/play">
+        <a className="landing-bottom-cta" href="/play">
           Enter the arena <ArrowRight />
-        </Link>
+        </a>
       </section>
     </main>
   );
