@@ -357,6 +357,22 @@ function writeRoomCode(roomCode: string) {
   }
 }
 
+function syncRoomAddress(roomCode: string) {
+  try {
+    const roomHash = `#room=${roomCode}`;
+    if (window.location.hash !== roomHash) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${window.location.search}${roomHash}`,
+      );
+    }
+    document.title = `Pitch The AI — Room ${roomCode}`;
+  } catch {
+    // The room-code guard still prevents cross-tab starts when URL state is unavailable.
+  }
+}
+
 function readRoomCode() {
   try {
     return window.sessionStorage.getItem(ROOM_CODE_STORAGE_KEY);
@@ -646,6 +662,7 @@ export function PitchArena() {
         : createRoomCode();
 
       writeRoomCode(nextRoomCode);
+      syncRoomAddress(nextRoomCode);
       setRoomCode(nextRoomCode);
 
       if (queued && queued.roomCode === nextRoomCode) {
@@ -1030,6 +1047,7 @@ export function PitchArena() {
       await enableMusic();
       await requestPitchAgent({
         roomCode,
+        roomUrl: window.location.href,
         founderName,
         companyName,
         askAmount: pitch.askAmount,

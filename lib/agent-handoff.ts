@@ -1,5 +1,6 @@
 export type PitchAgentRequest = {
   roomCode: string;
+  roomUrl: string;
   founderName: string;
   companyName: string;
   askAmount: number;
@@ -16,8 +17,8 @@ export type AgentHandoffResult = {
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
   return [
-    'Join the four-judge panel on the open Pitch The AI page.',
-    `Target room code ${request.roomCode}. Before starting, call get_pitch_context and confirm its roomCode is exactly ${request.roomCode}. If it does not match, stop and report that the wrong Pitch The AI tab is attached.`,
+    'Join the four-judge panel on the already-open Pitch The AI page.',
+    `Target room code ${request.roomCode} in the already-open tab whose exact URL is ${request.roomUrl}. Do not navigate that URL or open a new tab because the room state is local to the existing tab. Before starting, call get_pitch_context and confirm its roomCode is exactly ${request.roomCode}. If the first attached Pitch The AI tab does not match, inspect the other already-open Pitch The AI /play tabs and attach the one whose get_pitch_context roomCode is exactly ${request.roomCode}. If no open tab matches, stop and report that the target Pitch The AI room is not attached.`,
     `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, and the supplied opening pitch.`,
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
