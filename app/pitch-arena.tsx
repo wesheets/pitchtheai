@@ -2542,6 +2542,17 @@ export function PitchArena() {
     }
   }, []);
 
+  const beginPresentationRetake = useCallback(async () => {
+    const stream = await startFounderCamera('photo');
+    if (!stream) return;
+    setFocusedJudgeId(null);
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>('.founder-camera-slot')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }, [startFounderCamera]);
+
   const stopFounderCamera = useCallback(() => {
     if (recordingSession) return;
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -2623,9 +2634,22 @@ export function PitchArena() {
         { type: source.type },
       );
       const uploaded = await uploadMaterials([renamed]);
+      const activePresentationReset = presentationResetRef.current;
+      if (uploaded?.length && activePresentationReset.status === 'awaiting') {
+        const capturedReset: PresentationResetState = {
+          ...activePresentationReset,
+          status: 'captured',
+          materialId: uploaded[uploaded.length - 1].id,
+        };
+        presentationResetRef.current = capturedReset;
+        setPresentationReset(capturedReset);
+        setFocusedJudgeId(null);
+      }
       setCameraMessage(
         uploaded?.length
-          ? 'Founder photo uploaded. Judges can review it as readiness evidence.'
+          ? activePresentationReset.status === 'awaiting'
+            ? 'Retake submitted. The judge is reviewing it; the room clock remains paused.'
+            : 'Founder photo uploaded. Judges can review it as readiness evidence.'
           : 'The founder photo could not be uploaded. Try again.',
       );
     },
@@ -2999,7 +3023,7 @@ export function PitchArena() {
               judgeRescue.judgeId === focusedJudge.id
                 ? beginJudgeRescue
                 : focusedPresentationReset
-                  ? () => void startFounderCamera()
+                  ? () => void beginPresentationRetake()
                   : focusedReaction.question
                     ? beginFounderResponse
                     : () => setFocusedJudgeId(null)
@@ -3018,10 +3042,27 @@ export function PitchArena() {
                   : 'Back to the room'}
             <ArrowUpRight data-icon="inline-end" />
           </Button>
+          {focusedPresentationReset &&
+            presentationReset.status === 'awaiting' && (
+              <label className="judge-focus-upload">
+                <ImageIcon /> Upload a new photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="user"
+                  onChange={(event) => {
+                    void uploadFounderPhoto(event.currentTarget.files);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+            )}
           {focusedPresentationReset && (
             <p className="judge-focus-reset-note">
-              The pitch clock is paused. Open the camera, make the requested
-              change, and capture a new judge photo.
+              The pitch clock is paused. This opens the founder camera and
+              brings its capture controls into view. You may also upload a new
+              photo.
             </p>
           )}
           {focusedReaction.state === 'out' &&
