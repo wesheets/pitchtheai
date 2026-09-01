@@ -64,7 +64,7 @@ function JudgePreview({ judge }: { judge: (typeof judges)[number] }) {
         style={{ backgroundImage: `url(${judge.portrait})` }}
       />
       <div className="landing-judge-copy">
-        <span>{judge.role}</span>
+        <span><b>AI investor</b> · {judge.role}</span>
         <h3>{judge.name}</h3>
         <p>{judge.copy}</p>
         <small>Focus: {judge.focus}</small>
@@ -101,7 +101,7 @@ export default function Home() {
               rel="noreferrer"
               aria-describedby="external-beta-note"
             >
-              Another WebMCP browser <ArrowUpRight />
+              BringMy.ai beta <ArrowUpRight />
             </a>
             <div id="external-beta-note" role="tooltip">
               <strong>Optional external beta</strong>
@@ -144,6 +144,17 @@ export default function Home() {
               Leaderboard <Trophy />
             </a>
           </div>
+          <p className="landing-orientation">
+            Built for the{' '}
+            <a href="https://openai.com/webmcp-challenge/" target="_blank" rel="noreferrer">
+              WebMCP Challenge
+            </a>
+            . Play in ChatGPT/Codex or through the{' '}
+            <a href="https://bringmy.ai" target="_blank" rel="noreferrer">
+              BringMy.ai beta browser
+            </a>
+            .
+          </p>
           <div className="landing-proof">
             <div className="landing-proof-faces" aria-hidden="true">
               {judges.map((judge) => (
@@ -216,6 +227,11 @@ export default function Home() {
               <div className="landing-fake-slider"><i /></div>
             </aside>
           </div>
+        </div>
+        <div className="landing-game-loop" aria-label="How the game works">
+          <span><b>01</b><strong>Set your pitch</strong></span>
+          <span><b>02</b><strong>Face the judges</strong></span>
+          <span><b>03</b><strong>Climb the leaderboard</strong></span>
         </div>
         <div className="landing-feature-row">
           <article><ShieldQuestion /><span><strong>Face the judges</strong>Questions adapt to every answer.</span></article>

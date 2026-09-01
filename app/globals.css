@@ -4683,6 +4683,10 @@ textarea {
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
+.landing-judge-copy > span b {
+  color: #fff;
+  font: inherit;
+}
 .landing-judge-copy h3 {
   margin: 0.35rem 0;
   font-size: 1.18rem;
@@ -4731,9 +4735,9 @@ textarea {
 .landing-subtitle {
   max-width: 620px;
   margin: 1.4rem auto 0;
-  color: rgb(255 255 255 / 0.62);
-  font-size: 1.02rem;
-  line-height: 1.55;
+  color: rgb(255 255 255 / 0.76);
+  font-size: 1.1rem;
+  line-height: 1.48;
   text-wrap: balance;
 }
 .landing-actions {
@@ -4767,6 +4771,20 @@ textarea {
   color: #fff;
   background: rgb(5 7 10 / 0.7);
 }
+.landing-orientation {
+  max-width: 640px;
+  margin: 1rem auto 0;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.landing-orientation a {
+  color: #efc55f;
+  font-weight: 720;
+  text-decoration: none;
+}
+.landing-orientation a:hover { color: #ffe39c; }
 .landing-proof {
   display: flex;
   align-items: center;
@@ -4907,6 +4925,29 @@ textarea {
 }
 .landing-fake-slider { height: 3px; margin-top: 0.5rem; background: rgb(255 255 255 / 0.18); }
 .landing-fake-slider i { display: block; width: 58%; height: 100%; background: #ffc857; }
+.landing-game-loop {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(255 255 255 / 0.018);
+}
+.landing-game-loop span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 58px;
+  border-right: 1px solid rgb(255 255 255 / 0.07);
+  color: #fff;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+.landing-game-loop span:last-child { border-right: 0; }
+.landing-game-loop b {
+  color: #ffc857;
+  font-family: var(--font-geist-mono);
+  font-size: 0.62rem;
+}
 .landing-feature-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -4999,6 +5040,9 @@ textarea {
   .landing-field-row { grid-template-columns: 1fr 1fr; }
   .landing-difficulty-row b { display: none; }
   .landing-feature-row { grid-template-columns: 1fr 1fr; }
+  .landing-game-loop { grid-template-columns: 1fr; }
+  .landing-game-loop span { justify-content: flex-start; padding-inline: 1rem; border-right: 0; border-bottom: 1px solid rgb(255 255 255 / 0.07); }
+  .landing-game-loop span:last-child { border-bottom: 0; }
   .landing-feature-row article { min-height: 74px; }
   .landing-faq { padding-block: 5rem; }
   .landing-faq-grid { grid-template-columns: 1fr; }
