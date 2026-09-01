@@ -1167,6 +1167,19 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.18em;
 }
+.room-clock.clock-paused {
+  border-color: rgb(102 216 255 / 0.72);
+  color: #79ddff;
+  box-shadow:
+    inset 0 0 26px rgb(69 202 255 / 0.1),
+    0 0 30px rgb(69 202 255 / 0.16),
+    0 16px 36px #000;
+  animation: queued-pulse 0.9s ease-in-out infinite alternate;
+}
+.room-clock.clock-paused strong {
+  font-size: 17px;
+  letter-spacing: 0.08em;
+}
 .room-mode-pills {
   display: flex;
   justify-content: center;
@@ -2394,6 +2407,14 @@ textarea {
 .judge-focus-reason strong {
   color: #ff7189;
 }
+.judge-focus-reset-note {
+  max-width: 430px;
+  margin: 0.55rem auto 0;
+  color: #79ddff;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
 .judge-focus-respond {
   align-self: center;
   margin-top: 1rem;
@@ -3238,6 +3259,14 @@ textarea {
     0 0 30px rgb(255 190 66 / 0.15),
     inset 0 0 30px rgb(0 0 0 / 0.42);
   backdrop-filter: blur(18px);
+}
+.founder-video-dock.founder-video-reset {
+  z-index: 68;
+  border-color: #79ddff;
+  box-shadow:
+    0 24px 70px #000,
+    0 0 40px rgb(69 202 255 / 0.26),
+    inset 0 0 30px rgb(0 0 0 / 0.42);
 }
 .founder-video-dock > header {
   display: flex;

@@ -2,21 +2,23 @@
 
 Pitch your company to four AI judges. A weak pitch burns their patience until they say “I’m out.” A strong pitch can trigger competing offers, reversals, and a live bidding war.
 
-The twist is that the visitor’s browser agent plays the whole panel. The website provides the arena, transcript, timer, evidence tray, spoken reactions, adaptive score, founder-controlled negotiation, and public leaderboard; WebMCP gives ChatGPT or Codex eleven narrow tools for operating the live session.
+The twist is that the visitor’s browser agent plays the whole panel. The website provides the arena, transcript, timer, evidence tray, spoken reactions, adaptive score, founder-controlled negotiation, and public leaderboard; WebMCP gives ChatGPT or Codex thirteen narrow tools for operating the live session.
 
 ## WebMCP tools
 
-1. `start_pitch` — configure and start a new eight-minute session.
+1. `start_pitch` — configure and start a new twenty-minute session.
 2. `update_pitch_details` — update the company, ask, equity, immediate favorability, mood emoji, and soundtrack.
 3. `get_pitch_context` — read the transcript, uploaded evidence, panel state, and hidden game directives.
 4. `review_pitch_evidence` — confirm that every uploaded artifact was actually inspected.
 5. `post_judge_turn` — give exactly one judge the floor and optionally ask one question.
 6. `wait_for_founder_response` — hold the panel at the shared 45-second response gate.
-7. `post_judge_round` — run the optional four-judge opening montage without questions.
-8. `post_bid_round` — put one or more visible offers on the founder’s deal table.
-9. `wait_for_founder_offer_decision` — wait while the founder accepts, counters, or rejects.
-10. `post_panel_verdict` — finish, speak the verdict, and save only an explicitly accepted deal.
-11. `get_leaderboard` — read the public rankings.
+7. `wait_for_founder_readiness_photo` — pause the room for one judge-requested photo retake.
+8. `wait_for_judge_rescue` — hold an eliminated judge for the founder’s ten-second appeal.
+9. `post_judge_round` — run the optional four-judge opening montage without questions.
+10. `post_bid_round` — put one or more visible offers on the founder’s deal table.
+11. `wait_for_founder_offer_decision` — wait while the founder accepts, counters, or rejects.
+12. `post_panel_verdict` — finish, speak the verdict, and save only an explicitly accepted deal.
+13. `get_leaderboard` — read the public rankings.
 
 Tools are registered from the top-level page with `document.modelContext.registerTool`. The app remains usable in ordinary browsers without WebMCP.
 
@@ -30,6 +32,7 @@ Tools are registered from the top-level page with `document.modelContext.registe
 - The project owner’s purchased ElevenLabs cinematic track is available alongside original Web Audio heartbeat, tension, fear, excitement, and triumph cues.
 - Optional captions keep the experience accessible and demo-friendly.
 - JPG, PNG, WebP, PDF, text, Markdown, and PPTX evidence can be attached to a pitch. Files are stored in R2 and their inspectable links are included in pitch context.
+- The founder camera is opt-in. A still becomes inspectable pitch evidence only after capture; session recording downloads locally as a WebM with the arena, founder picture-in-picture, and available audio.
 
 ## Stack
 

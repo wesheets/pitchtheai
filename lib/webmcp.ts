@@ -11,6 +11,7 @@ import type {
   FounderTurnState,
   JudgeLifelineState,
   JudgeRescueState,
+  PresentationResetState,
   PitchDifficulty,
   PitchFeedEntry,
   PitchMaterial,
@@ -67,6 +68,7 @@ type PitchSnapshot = {
   founderTurn: FounderTurnState;
   judgeRescue: JudgeRescueState;
   judgeLifeline: JudgeLifelineState;
+  presentationReset: PresentationResetState;
   evidenceReview: {
     pendingMaterialIds: string[];
     reviews: EvidenceReview[];
@@ -100,6 +102,9 @@ type PitchToolOptions = {
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
   waitForJudgeRescue: () => Promise<Record<string, unknown>>;
+  waitForFounderReadinessPhoto: (
+    timeoutSeconds?: number,
+  ) => Promise<Record<string, unknown>>;
   waitForFounderOfferDecision: (
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
@@ -207,6 +212,7 @@ const reactionSchema = {
       ],
     },
     outReason: { type: 'string', maxLength: 240 },
+    presentationReset: { type: 'boolean' },
   },
   additionalProperties: false,
 };
@@ -332,6 +338,23 @@ export function registerPitchTools(options: PitchToolOptions) {
     ) {
       throw new Error(
         `The founder used Second Chance on ${lifeline.judgeId}. That recalled judge must speak next and ask one final question before anyone else gets the floor.`,
+      );
+    }
+  };
+  const requirePresentationResetComplete = (nextJudgeId?: JudgeId) => {
+    const reset = optionsRef.current.getSnapshot().presentationReset;
+    if (reset.status === 'awaiting' || reset.status === 'captured') {
+      throw new Error(
+        'A judge paused the room for a founder photo retake. Call wait_for_founder_readiness_photo until the new photo is captured, open it, then call review_pitch_evidence.',
+      );
+    }
+    if (
+      reset.status === 'reviewed' &&
+      reset.judgeId &&
+      nextJudgeId !== reset.judgeId
+    ) {
+      throw new Error(
+        `The founder retake was reviewed for ${reset.judgeId}. That same judge must respond before anyone else gets the floor.`,
       );
     }
   };
@@ -461,7 +484,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'get_pitch_context',
       description:
-        "Read this tab's unique room code, opening draft, live pitch transcript, difficulty, founder/judge dialogue, response gate, judge-rescue gate, founder-camera evidence, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Equity 0 means competition mode: judge WebMCP fit, user experience, human-agent collaboration, implementation, originality, and resilience instead of pretending it is a normal investment. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. The newest file named founder-readiness-* is the exact opt-in image shown on the founder card; older files with that prefix are prior retakes. It may inform only observable pitch-readiness feedback such as framing, lighting, eye contact, and attire preparedness. Never infer or score attractiveness, age, race, ethnicity, gender, disability, health, religion, income, identity, or other sensitive traits. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The response clock begins only when they click Respond, and any submitted answer remains available across slices. If a judge goes out, immediately call wait_for_judge_rescue; the founder may appeal once and the same judge must answer it. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
+        "Read this tab's unique room code, opening draft, live pitch transcript, difficulty, founder/judge dialogue, response gate, judge-rescue gate, presentation-reset gate, founder-camera evidence, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Equity 0 means competition mode: judge WebMCP fit, user experience, human-agent collaboration, implementation, originality, and resilience instead of pretending it is a normal investment. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. The newest file named founder-readiness-* is the exact opt-in image shown on the founder card; older files with that prefix are prior retakes. It may inform only observable pitch-readiness feedback such as framing, lighting, eye contact, and attire preparedness. Never infer or score attractiveness, age, race, ethnicity, gender, disability, health, religion, income, identity, or other sensitive traits. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The response clock begins only when they click Respond, and any submitted answer remains available across slices. A judge who sees an easily reversible readiness problem may set presentationReset true without a question, explicitly ask for the change, then immediately call wait_for_founder_readiness_photo in consecutive 12-second slices. The room clock pauses until the new image is captured and reviewed; the same judge must react next. Use this theatrical reset at most once per pitch, never for sensitive or immutable characteristics. If a judge goes out, immediately call wait_for_judge_rescue; the founder may appeal once and the same judge must answer it. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
       inputSchema: {
         type: 'object',
         properties: {},
@@ -523,7 +546,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'post_judge_turn',
       description:
-        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before the difficulty-based answer clock begins. Keep it focused and under 90 spoken words. Respect pitch.difficulty: Easy coaches, Medium balances, Hard presses, Legendary is ruthless and makes offers rare. When equity is 0, use competition criteria—WebMCP fit, UX, human-agent collaboration, implementation, originality, and resilience—not ordinary investment traction. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Ground reactions in reviewed evidence. A founder-readiness photo has real but limited weight: an appropriate judge may call out visible presentation choices that undermine credibility—such as sunglasses obscuring eye contact or conspicuously casual headwear in a formal pitch—and may joke in character, then must let the founder explain whether the look is a deliberate brand choice. Never infer sensitive traits, rate attractiveness, or comment on cultural, religious, disability-related, or medical attire. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue; then call wait_for_judge_rescue. If judgeLifeline is pending, the recalled judge named there must speak next and ask one final question.",
+        "Post exactly one judge turn. The arena moves that investor to a large center-stage card above the pitch controls while the other three mounted screens stay in place. The founder must click Respond before the input returns and before the difficulty-based answer clock begins. Keep it focused and under 90 spoken words. Respect pitch.difficulty: Easy coaches, Medium balances, Hard presses, Legendary is ruthless and makes offers rare. When equity is 0, use competition criteria—WebMCP fit, UX, human-agent collaboration, implementation, originality, and resilience—not ordinary investment traction. Set answerQuality to rate the founder's immediately preceding answer, or unrated for the first question. Ground reactions in reviewed evidence. A founder-readiness photo has real but limited weight and no generic attire score: interpret the same visible choice through each persona. Priya may question seriousness and unobstructed eye contact; Theo may ignore style if the operating proof is excellent; Maya may challenge whether the look is performative or authentic to the customer; Julian may reward confidence when the presentation is coherent with the brand. An appropriate judge may call out visible choices that undermine credibility—such as sunglasses obscuring eye contact or conspicuously casual headwear in a formal pitch—and may joke in character, then must let the founder explain whether the look is a deliberate brand choice. For an easily reversible issue, set presentationReset true, omit question, explicitly tell the founder what to change, and then call wait_for_founder_readiness_photo; use this gate at most once per pitch. Never infer sensitive traits, rate attractiveness, or comment on cultural, religious, disability-related, or medical attire. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive 12-second slices. If a slice returns waiting, call it again immediately without analysis; submitted answers persist across slices. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue; then call wait_for_judge_rescue. If judgeLifeline is pending, the recalled judge named there must speak next and ask one final question.",
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -541,6 +564,20 @@ export function registerPitchTools(options: PitchToolOptions) {
         const judge = args.judge as JudgeReaction;
         requireJudgeRescueComplete(judge.judgeId);
         requireJudgeLifelineComplete(judge.judgeId);
+        requirePresentationResetComplete(judge.judgeId);
+        if (
+          judge.presentationReset &&
+          optionsRef.current.getSnapshot().presentationReset.usedAt
+        ) {
+          throw new Error(
+            'The one presentation reset for this pitch has already been used.',
+          );
+        }
+        if (judge.presentationReset && judge.question) {
+          throw new Error(
+            'A presentation reset is a photo-retake gate, not a founder-answer gate. Omit question and call wait_for_founder_readiness_photo next.',
+          );
+        }
         if (
           judge.state === 'out' &&
           (!judge.outReason || !judge.outReason.trim())
@@ -553,11 +590,13 @@ export function registerPitchTools(options: PitchToolOptions) {
         return {
           posted: true,
           judge,
-          next: judge.question
-            ? 'Call wait_for_founder_response now.'
-            : judge.state === 'out'
-              ? 'Call wait_for_judge_rescue now. The founder has one chance to stop this judge from leaving.'
-              : 'The founder may continue, or another judge may speak.',
+          next: judge.presentationReset
+            ? 'Call wait_for_founder_readiness_photo now. The pitch clock is paused until the founder retake is reviewed.'
+            : judge.question
+              ? 'Call wait_for_founder_response now.'
+              : judge.state === 'out'
+                ? 'Call wait_for_judge_rescue now. The founder has one chance to stop this judge from leaving.'
+                : 'The founder may continue, or another judge may speak.',
         };
       },
     },
@@ -579,6 +618,27 @@ export function registerPitchTools(options: PitchToolOptions) {
       },
       execute: (args) =>
         optionsRef.current.waitForFounderResponse(
+          typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
+        ),
+    },
+    {
+      name: 'wait_for_founder_readiness_photo',
+      description:
+        'Wait up to 12 seconds while the room clock is paused and the founder follows a judge presentation-reset request, opens the camera, and submits a new readiness photo. If waiting, call this tool again immediately. When captured, open and inspect the returned exact material URL, then call review_pitch_evidence. The same judge must react to the retake before anyone else speaks.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          timeoutSeconds: {
+            type: 'number',
+            minimum: 1,
+            maximum: 12,
+            default: 12,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) =>
+        optionsRef.current.waitForFounderReadinessPhoto(
           typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
         ),
     },
@@ -616,6 +676,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireFounderTurnComplete();
         requireOfferDecisionComplete();
         requireNoAcceptedDeal();
+        requirePresentationResetComplete();
         const judges = args.judges as JudgeReaction[];
         if (new Set(judges.map((judge) => judge.judgeId)).size !== 4) {
           throw new Error('Provide exactly one reaction for each judge.');
@@ -666,6 +727,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireFounderTurnComplete();
         requireOfferDecisionComplete();
         requireNoAcceptedDeal();
+        requirePresentationResetComplete();
         const bids = args.bids as Bid[];
         if (new Set(bids.map((bid) => bid.judgeId)).size !== bids.length) {
           throw new Error(
@@ -720,6 +782,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireEvidenceReview();
         requireFounderTurnComplete();
         requireOfferDecisionComplete();
+        requirePresentationResetComplete();
         const snapshot = optionsRef.current.getSnapshot();
         const acceptedBid = snapshot.acceptedBid;
         const amountRaised = Number(args.amountRaised);
