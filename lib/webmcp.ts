@@ -188,7 +188,7 @@ export function registerPitchTools(options: {
   const tools: RegisterToolArgs[] = [
     {
       name: 'start_pitch',
-      description: `Start or replace the visible Pitch The AI session in room ${options.getSnapshot().roomCode}. Use when the founder gives a company name, funding ask, and equity offer. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the eight-minute clock.`,
+      description: `Start or replace the visible Pitch The AI session in room ${options.getSnapshot().roomCode}. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the eight-minute clock.`,
       inputSchema: {
         type: 'object',
         required: ['companyName', 'askAmount', 'equity'],
@@ -196,7 +196,7 @@ export function registerPitchTools(options: {
           founderName: { type: 'string', maxLength: 80 },
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
           askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
-          equity: { type: 'number', minimum: 0.1, maximum: 100 },
+          equity: { type: 'number', minimum: 0, maximum: 100 },
           openingPitch: { type: 'string', maxLength: 6000 },
         },
         additionalProperties: false,
@@ -227,7 +227,7 @@ export function registerPitchTools(options: {
     {
       name: 'update_pitch_details',
       description:
-        'Update the visible pitch brief and the panel’s immediate room read after extracting details from the founder’s speech or text. Call as soon as the company name, funding ask, and equity are known, then whenever those facts or the panel mood materially change. Select a soundtrack that matches the tension; the founder controls whether browser audio is enabled.',
+        'Update the visible pitch brief and the panel’s immediate room read after extracting details from the founder’s speech or text. Call as soon as the company name and ask are known, then whenever those facts or the panel mood materially change. Equity may be 0 for a prize or non-equity contest ask. Select a soundtrack that matches the tension; the founder controls whether browser audio is enabled.',
       inputSchema: {
         type: 'object',
         required: [
@@ -242,7 +242,7 @@ export function registerPitchTools(options: {
           founderName: { type: 'string', maxLength: 80 },
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
           askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
-          equity: { type: 'number', minimum: 0.1, maximum: 100 },
+          equity: { type: 'number', minimum: 0, maximum: 100 },
           favorability: { type: 'number', minimum: 0, maximum: 100 },
           mood: {
             type: 'string',

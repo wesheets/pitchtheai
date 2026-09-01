@@ -288,6 +288,11 @@ function money(value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
+function pitchAskLabel(askAmount: number, equity: number) {
+  return equity <= 0
+    ? `${money(askAmount)} prize · no equity`
+    : `${money(askAmount)} for ${equity}%`;
+}
 function clampInterest(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -697,7 +702,7 @@ export function PitchArena() {
       founderName: update.founderName?.trim() || current.founderName,
       companyName: update.companyName.trim() || current.companyName,
       askAmount: Math.max(0, Math.round(update.askAmount)),
-      equity: Math.max(0.1, Math.min(100, update.equity)),
+      equity: Math.max(0, Math.min(100, update.equity)),
       favorability: clampInterest(update.favorability),
       mood: update.mood,
       soundtrack: update.soundtrack,
@@ -1422,9 +1427,7 @@ export function PitchArena() {
               ) : (
                 <>
                   {pitch.companyName}
-                  <span>
-                    {money(pitch.askAmount)} for {pitch.equity}%
-                  </span>
+                  <span>{pitchAskLabel(pitch.askAmount, pitch.equity)}</span>
                 </>
               )}
             </h1>
@@ -1645,7 +1648,7 @@ export function PitchArena() {
                     <Input
                       aria-label="Equity percentage"
                       type="number"
-                      min={0.1}
+                      min={0}
                       max={100}
                       step={0.1}
                       value={pitch.equity}
@@ -1653,7 +1656,7 @@ export function PitchArena() {
                         setPitch((current) => ({
                           ...current,
                           equity: Math.max(
-                            0.1,
+                            0,
                             Math.min(100, Number(event.target.value)),
                           ),
                         }))
