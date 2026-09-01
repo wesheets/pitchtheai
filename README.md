@@ -2,7 +2,7 @@
 
 Pitch The AI is a live, theatrical pitch simulator controlled by a browser AI through WebMCP. The founder speaks or types while four distinct AI investors question the pitch, react to evidence, lose patience, leave the room, make competing offers, and deliver a final verdict.
 
-Play it at [pitchtheai.com](https://pitchtheai.com) or [www.pitchtheai.com](https://www.pitchtheai.com).
+Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchtheai.com/play](https://pitchtheai.com/play).
 
 ## The experience
 
@@ -64,6 +64,20 @@ The arena still renders in an ordinary browser, but a WebMCP-capable agent is re
 
 Difficulty changes how forgiving the panel is, not just the visual theme. Judges score answer quality, specificity, evidence, consistency, and whether the founder actually answered the question. Silence, repetition, contradictions, and evasions burn patience. Accepted deals and final scores can be submitted to the public leaderboard with the session duration.
 
+## Data and privacy boundary
+
+Pitch The AI uses its own project-scoped Sites storage. It does not use or write
+to a Promethios database.
+
+- The leaderboard stores only founder name, venture name, score, amount raised,
+  ask, pitch duration, and timestamp.
+- Pitch transcripts, camera video, microphone audio, and session recordings are
+  not uploaded with leaderboard entries.
+- **Share result** creates a branded final-verdict image in the browser. It is
+  shared or downloaded locally and is not stored by the site.
+- Uploaded pitch evidence uses the Pitch The AI project bucket and is separate
+  from leaderboard rows.
+
 ## Architecture
 
 - React 19 + Vinext
@@ -74,6 +88,8 @@ Difficulty changes how forgiving the panel is, not just the visual theme. Judges
 - WebMCP site tools for the live panel protocol
 
 The browser-agent handoff is deliberately vendor-neutral: the site copies a room-bound prompt that can be pasted into a compatible agent attached to the same page.
+
+The landing page also labels and links to BringMy.ai as an optional external beta for testing WebMCP with other AI providers. It is a separate product, is not required to play, and is not part of this repository or its MIT license.
 
 ## Local development
 

@@ -746,12 +746,19 @@ export function PitchArena() {
     if (!audioContextRef.current)
       audioContextRef.current = new AudioContextClass();
     await audioContextRef.current.resume();
+    window.sessionStorage.setItem('pitchtheai:music', 'on');
     setMusicOn(true);
   }, []);
 
+  useEffect(() => {
+    if (window.sessionStorage.getItem('pitchtheai:music') !== 'on') return;
+    const resumeTimer = window.setTimeout(() => void enableMusic(), 0);
+    return () => window.clearTimeout(resumeTimer);
+  }, [enableMusic]);
+
   const activeSoundtrack =
     launchCount !== null
-      ? 'game'
+      ? 'cinematic'
       : pitch.status === 'live' &&
           (founderTurn.status === 'awaiting' || pitch.secondsLeft <= 120)
         ? 'heartbeat'
@@ -2219,16 +2226,100 @@ export function PitchArena() {
   }, [sessionTranscript]);
 
   const shareSession = useCallback(async () => {
+    const snapshot = pitchRef.current;
     const shareData = {
-      title: `${pitchRef.current.companyName} — Pitch The AI`,
-      text: `${pitchRef.current.founderName} scored ${pitchRef.current.score ?? pitchRef.current.favorability}/100 in ${DIFFICULTY_META[pitchRef.current.difficulty].label} mode.`,
+      title: `${snapshot.companyName} — Pitch The AI`,
+      text: `${snapshot.founderName} scored ${snapshot.score ?? snapshot.favorability}/100 in ${DIFFICULTY_META[snapshot.difficulty].label} mode.`,
       url: window.location.href,
     };
-    if (navigator.share) await navigator.share(shareData);
-    else
-      await navigator.clipboard.writeText(
-        `${shareData.title}\n${shareData.text}\n${shareData.url}`,
-      );
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 630;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    const background = context.createRadialGradient(600, 280, 20, 600, 280, 720);
+    background.addColorStop(0, '#241a09');
+    background.addColorStop(0.48, '#0d0c0a');
+    background.addColorStop(1, '#020202');
+    context.fillStyle = background;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = '#dcae42';
+    context.lineWidth = 3;
+    context.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
+
+    context.fillStyle = '#e5b843';
+    context.font = '700 24px Arial, sans-serif';
+    context.fillText('PITCH THE AI · FINAL VERDICT', 76, 88);
+    context.fillStyle = '#ffffff';
+    context.font = '800 58px Arial, sans-serif';
+    context.fillText(snapshot.companyName || 'Untitled venture', 76, 166);
+    context.fillStyle = '#e5b843';
+    context.font = '800 96px Arial, sans-serif';
+    context.fillText(String(snapshot.score ?? snapshot.favorability), 76, 294);
+    context.fillStyle = '#8c8a83';
+    context.font = '700 26px Arial, sans-serif';
+    context.fillText('/100', 214, 292);
+    context.fillStyle = '#ffffff';
+    context.font = '800 40px Arial, sans-serif';
+    context.fillText(snapshot.amountRaised ? 'YOU GOT A DEAL.' : 'NO DEAL.', 76, 356);
+
+    const summary = snapshot.summary || 'The room has delivered its verdict.';
+    const words = summary.split(/\s+/);
+    const lines: string[] = [];
+    let line = '';
+    context.font = '500 24px Arial, sans-serif';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width > 690 && line) {
+        lines.push(line);
+        line = word;
+      } else line = candidate;
+      if (lines.length === 6) break;
+    }
+    if (line && lines.length < 7) lines.push(line);
+    context.fillStyle = '#d4d1ca';
+    lines.slice(0, 7).forEach((text, index) => {
+      context.fillText(text, 400, 235 + index * 38);
+    });
+
+    context.fillStyle = '#8c8a83';
+    context.font = '600 20px Arial, sans-serif';
+    context.fillText(
+      `${snapshot.founderName} · ${DIFFICULTY_META[snapshot.difficulty].label} mode · ${formatClock(snapshot.durationSeconds ?? 0)}`,
+      76,
+      542,
+    );
+    context.fillStyle = '#e5b843';
+    context.fillText('pitchtheai.com', 974, 542);
+
+    const imageBlob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/png'),
+    );
+    const file = imageBlob
+      ? new File([imageBlob], 'pitch-the-ai-result.png', { type: 'image/png' })
+      : null;
+
+    if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ ...shareData, files: [file] });
+      return;
+    }
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+    if (imageBlob) {
+      const href = URL.createObjectURL(imageBlob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = 'pitch-the-ai-result.png';
+      link.click();
+      URL.revokeObjectURL(href);
+    }
+    await navigator.clipboard.writeText(
+      `${shareData.title}\n${shareData.text}\n${shareData.url}`,
+    );
   }, []);
 
   const openIssueReport = useCallback(() => {
@@ -3116,6 +3207,7 @@ export function PitchArena() {
               if (musicOn) {
                 soundtrackStopRef.current?.();
                 soundtrackStopRef.current = null;
+                window.sessionStorage.setItem('pitchtheai:music', 'off');
                 setMusicOn(false);
               } else {
                 void enableMusic();
@@ -3952,6 +4044,7 @@ export function PitchArena() {
                   if (musicOn) {
                     soundtrackStopRef.current?.();
                     soundtrackStopRef.current = null;
+                    window.sessionStorage.setItem('pitchtheai:music', 'off');
                     setMusicOn(false);
                   } else void enableMusic();
                 }}
