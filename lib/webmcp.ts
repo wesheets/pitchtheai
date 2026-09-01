@@ -44,6 +44,15 @@ type PitchSnapshot = {
     interest: number;
     spoken: string;
     question?: string;
+    reactionStyle?: 'neutral' | 'laughing' | 'exasperated';
+    answerQuality?:
+      | 'unrated'
+      | 'unanswered'
+      | 'evasive'
+      | 'weak'
+      | 'credible'
+      | 'exceptional';
+    outReason?: string;
   }>;
   bids: Bid[];
   materials: PitchMaterial[];
@@ -86,7 +95,15 @@ const judgeIdSchema = {
 };
 const reactionSchema = {
   type: 'object',
-  required: ['judgeId', 'state', 'interest', 'mood', 'spoken'],
+  required: [
+    'judgeId',
+    'state',
+    'interest',
+    'mood',
+    'spoken',
+    'reactionStyle',
+    'answerQuality',
+  ],
   properties: {
     judgeId: judgeIdSchema,
     state: {
@@ -100,6 +117,22 @@ const reactionSchema = {
     },
     spoken: { type: 'string', minLength: 1, maxLength: 500 },
     question: { type: 'string', maxLength: 300 },
+    reactionStyle: {
+      type: 'string',
+      enum: ['neutral', 'laughing', 'exasperated'],
+    },
+    answerQuality: {
+      type: 'string',
+      enum: [
+        'unrated',
+        'unanswered',
+        'evasive',
+        'weak',
+        'credible',
+        'exceptional',
+      ],
+    },
+    outReason: { type: 'string', maxLength: 240 },
   },
   additionalProperties: false,
 };
@@ -318,7 +351,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_judge_turn',
       description:
-        'Post exactly one visible and spoken judge turn. Keep it focused and under 90 spoken words. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Never post another judge while the founder gate is open. Reward specific evidence and genuine answers; lower interest for evasive replies. A timeout should make the next turn sharper and more ruthless, not fabricate an answer.',
+        'Post exactly one judge turn. The arena replaces the founder input with this judge\'s enlarged portrait and dialogue; the founder must click Respond before the input returns. Keep it focused and under 90 spoken words. Set answerQuality to rate the founder\'s immediately preceding answer, or unrated for the first question. Use laughing when the pitch or answer is genuinely ridiculous; use exasperated for repetition, evasion, or silence; otherwise use neutral. When the judge asks a question, include the exact question field, then immediately call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Never post another judge while the founder gate is open. Do not politely accept a response that did not answer the question: say so directly, including “you never answered my question” when true. If state is out, outReason is required and must name the specific unanswered, disproven, or unacceptable issue.',
       inputSchema: {
         type: 'object',
         required: ['roundSummary', 'judge'],
@@ -332,6 +365,14 @@ export function registerPitchTools(options: {
         requireEvidenceReview();
         requireFounderTurnComplete();
         const judge = args.judge as JudgeReaction;
+        if (
+          judge.state === 'out' &&
+          (!judge.outReason || !judge.outReason.trim())
+        ) {
+          throw new Error(
+            'An out judge must include outReason so the founder can see exactly why the investor left.',
+          );
+        }
         options.applyJudgeTurn(String(args.roundSummary), judge);
         return {
           posted: true,
@@ -445,7 +486,7 @@ export function registerPitchTools(options: {
     {
       name: 'post_panel_verdict',
       description:
-        'End the visible pitch with a fair 0–100 score, capital raised, and concise spoken panel verdict. In a voice chat, let the arena speak the verdict instead of reading it yourself. This saves the result to the public leaderboard. Use amountRaised 0 when no offer is accepted or all judges are out.',
+        'End the visible pitch with a 0–100 score, capital raised, and a concise roast-style arena verdict. The verdict is displayed large, so write like a ruthless game-show judge, not a professional investment memo. Call out the founder\'s actual evasions and unanswered questions in plain language. Repeated evasion or silence with no credible answers belongs below 15; if every judge is out and the founder never answered the core questions, score 0–8. The app enforces these caps from the turn ratings. Use amountRaised 0 when no offer is accepted or all judges are out.',
       inputSchema: {
         type: 'object',
         required: ['score', 'summary', 'amountRaised'],

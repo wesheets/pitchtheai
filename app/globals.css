@@ -1508,7 +1508,7 @@ textarea {
 }
 .judge-monitor.monitor-active-turn {
   z-index: 18;
-  scale: 1.5;
+  scale: 1.045;
 }
 .monitor-interest [data-slot='progress-track'] {
   height: 2px;
@@ -1549,8 +1549,43 @@ textarea {
   opacity: 0;
   filter: grayscale(0.9) brightness(0.25);
   pointer-events: none;
-  transition-delay: 0s;
+  transition-delay: 1.85s;
   transition-duration: 1.15s, 0.45s, 0.7s, 0.7s;
+}
+.judge-out-stamp {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.65rem;
+  padding: 1.25rem;
+  color: #fff;
+  background:
+    radial-gradient(circle at center, rgb(120 0 16 / 0.26), rgb(0 0 0 / 0.9) 72%),
+    repeating-linear-gradient(
+      -12deg,
+      transparent 0 9px,
+      rgb(255 70 88 / 0.08) 10px 11px
+    );
+  text-align: center;
+  text-shadow: 0 4px 16px #000;
+  animation: judge-out-flash 1.85s cubic-bezier(0.2, 0.82, 0.2, 1) both;
+}
+.judge-out-stamp strong {
+  color: #ff526d;
+  font: 900 clamp(30px, 3.5vw, 58px) / 0.9 var(--font-geist-sans);
+  letter-spacing: -0.06em;
+  transform: rotate(-4deg);
+  text-shadow:
+    0 5px 0 #4a0611,
+    0 0 28px rgb(255 55 85 / 0.85);
+}
+.judge-out-stamp span {
+  max-width: 25ch;
+  color: rgb(255 255 255 / 0.9);
+  font-size: clamp(9px, 0.72vw, 12px);
+  line-height: 1.35;
 }
 .monitor-bidding .monitor-bezel {
   border-color: var(--judge-color);
@@ -1679,8 +1714,145 @@ textarea {
   padding-top: 0.5rem;
 }
 .room-pitch-console {
+  position: relative;
+  overflow: hidden;
   min-height: 88px;
   border-radius: 10px;
+}
+.judge-focus-stage {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.28fr);
+  min-height: 255px;
+  border: 1px solid color-mix(in srgb, var(--judge-color) 45%, transparent);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background:
+    radial-gradient(circle at 22% 38%, color-mix(in srgb, var(--judge-color) 13%, transparent), transparent 38%),
+    linear-gradient(135deg, rgb(9 12 17 / 0.99), rgb(0 0 0 / 0.97));
+  box-shadow:
+    inset 0 0 42px rgb(0 0 0 / 0.75),
+    0 0 28px color-mix(in srgb, var(--judge-color) 13%, transparent);
+  animation: judge-focus-arrive 0.38s cubic-bezier(0.2, 0.84, 0.23, 1) both;
+}
+.judge-focus-portrait-wrap {
+  min-width: 0;
+  padding: 0.2rem;
+}
+.judge-focus-portrait {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  min-height: 230px;
+  border: 2px solid color-mix(in srgb, var(--judge-color) 70%, white 7%);
+  border-radius: 18px;
+  background-repeat: no-repeat;
+  filter: contrast(1.1) saturate(1.08);
+  box-shadow:
+    inset 0 0 38px #000,
+    0 0 32px color-mix(in srgb, var(--judge-color) 25%, transparent);
+}
+.judge-focus-portrait::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 52%, rgb(0 0 0 / 0.9));
+  pointer-events: none;
+}
+.judge-focus-portrait > span,
+.judge-focus-portrait > strong,
+.judge-focus-portrait > small,
+.judge-focus-portrait > b {
+  position: absolute;
+  z-index: 7;
+}
+.judge-focus-portrait > span {
+  top: 0.75rem;
+  left: 0.8rem;
+  color: var(--judge-color);
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.judge-focus-portrait > strong {
+  right: 0.8rem;
+  bottom: 1.35rem;
+  left: 0.8rem;
+  color: #fff;
+  font: 800 clamp(18px, 1.55vw, 27px) var(--font-geist-mono);
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 2px 14px #000, 0 0 10px var(--judge-color);
+}
+.judge-focus-portrait > small {
+  right: 0.8rem;
+  bottom: 0.55rem;
+  left: 0.8rem;
+  color: var(--judge-color);
+  font: 800 8px var(--font-geist-sans);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.judge-focus-portrait > b {
+  top: 47%;
+  right: 0;
+  left: 0;
+  color: #ff526d;
+  font: 950 clamp(28px, 3.5vw, 52px) var(--font-geist-sans);
+  text-align: center;
+  transform: rotate(-5deg);
+  text-shadow: 0 5px 0 #4d0713, 0 0 30px #ff3154;
+}
+.judge-focus-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 1rem clamp(0.8rem, 2vw, 1.6rem);
+}
+.judge-focus-kicker {
+  color: var(--judge-color);
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+.judge-focus-copy blockquote {
+  margin: 0.65rem 0 0;
+  color: #fff;
+  font-family: var(--font-geist-sans);
+  font-size: clamp(17px, 1.45vw, 25px);
+  font-weight: 680;
+  line-height: 1.16;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  text-shadow: 0 5px 22px #000;
+}
+.judge-focus-question,
+.judge-focus-reason {
+  margin: 0.7rem 0 0;
+  color: rgb(255 255 255 / 0.68);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.judge-focus-question {
+  border-left: 2px solid var(--judge-color);
+  padding-left: 0.7rem;
+}
+.judge-focus-reason strong {
+  color: #ff7189;
+}
+.judge-focus-respond {
+  align-self: flex-start;
+  margin-top: 1rem;
+  color: #030303;
+  background: var(--judge-color);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--judge-color) 25%, transparent);
+}
+.judge-focus-out {
+  border-color: rgb(255 70 93 / 0.62);
+  --judge-color: #ff526d;
 }
 .room-pitch-console textarea {
   min-height: 42px;
@@ -1755,6 +1927,118 @@ textarea {
   color: white;
   font-size: 11px;
   white-space: nowrap;
+}
+.room-control-deck-final {
+  width: min(1040px, calc(100% - 40px));
+  margin-top: -2rem;
+  padding: 0.8rem;
+  box-shadow:
+    0 42px 120px #000,
+    0 0 100px rgb(0 0 0 / 0.95),
+    0 0 45px rgb(255 180 43 / 0.14);
+}
+.room-control-deck-final .room-console-grid {
+  grid-template-columns: 1fr;
+}
+.room-control-deck-final .room-deck-actions,
+.room-control-deck-final .room-evidence-tray {
+  display: none;
+}
+.arena-final-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.3rem, 3vw, 3rem);
+  min-height: 270px;
+  padding: clamp(1.4rem, 3vw, 3rem);
+  background:
+    radial-gradient(circle at 12% 50%, rgb(255 190 75 / 0.12), transparent 32%),
+    linear-gradient(140deg, rgb(17 13 7 / 0.98), rgb(1 2 4 / 0.98));
+  box-shadow: inset 0 0 60px #000;
+}
+.arena-final-score {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  min-width: 180px;
+  text-align: center;
+}
+.arena-final-score > span {
+  grid-column: 1 / -1;
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+.arena-final-score strong {
+  color: #ffc857;
+  font: 900 clamp(74px, 9vw, 132px) / 0.8 var(--font-geist-sans);
+  letter-spacing: -0.09em;
+  text-shadow: 0 8px 0 #57370a, 0 0 42px rgb(255 183 45 / 0.5);
+}
+.arena-final-score small {
+  margin: 0 0 0.2rem 0.3rem;
+  color: rgb(255 255 255 / 0.35);
+  font: 700 13px var(--font-geist-mono);
+}
+.arena-final-copy > p {
+  color: #ffc857;
+  font: 800 9px var(--font-geist-mono);
+  letter-spacing: 0.17em;
+}
+.arena-final-copy h2 {
+  margin-top: 0.2rem;
+  color: #fff;
+  font: 900 clamp(30px, 3.2vw, 52px) / 0.95 var(--font-geist-sans);
+  letter-spacing: -0.055em;
+}
+.arena-final-copy blockquote {
+  max-width: 58ch;
+  margin: 0.75rem 0 0;
+  color: rgb(255 255 255 / 0.86);
+  font-size: clamp(15px, 1.2vw, 19px);
+  font-weight: 600;
+  line-height: 1.4;
+  text-shadow: 0 4px 18px #000;
+}
+.arena-final-copy > div {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  color: rgb(255 255 255 / 0.42);
+  font: 700 10px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+.arena-final-copy b {
+  color: #ffc857;
+}
+
+@keyframes judge-focus-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(1.08);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes judge-out-flash {
+  0% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  18%, 78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
 }
 
 .room-pitch-brief {
@@ -2288,7 +2572,7 @@ textarea {
     transform: rotateX(7deg);
   }
   .judge-monitor.monitor-active-turn {
-    scale: 1.2;
+    scale: 1.035;
   }
   .stage-microphone {
     top: 500px;
@@ -2361,7 +2645,7 @@ textarea {
     display: none;
   }
   .judge-monitor.monitor-active-turn {
-    scale: 1.05;
+    scale: 1.02;
   }
   .judge-response-overlay {
     position: relative;
@@ -2391,6 +2675,22 @@ textarea {
   .room-console-grid {
     grid-template-columns: 1fr;
   }
+  .judge-focus-stage {
+    grid-template-columns: minmax(135px, 0.7fr) minmax(0, 1.3fr);
+  }
+  .judge-focus-portrait {
+    min-height: 210px;
+  }
+  .room-control-deck-final {
+    margin-top: 1rem;
+  }
+  .arena-final-summary {
+    grid-template-columns: 1fr;
+  }
+  .arena-final-score {
+    justify-content: start;
+    text-align: left;
+  }
   .room-deck-actions {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -2416,6 +2716,12 @@ textarea {
   }
   .room-deck-actions {
     grid-template-columns: 1fr;
+  }
+  .judge-focus-stage {
+    grid-template-columns: 1fr;
+  }
+  .judge-focus-portrait {
+    min-height: 260px;
   }
   .room-metrics {
     grid-template-columns: 1fr 1fr;

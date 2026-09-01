@@ -49,6 +49,14 @@ import { registerPitchTools } from '@/lib/webmcp';
 export type JudgeId = 'maya' | 'julian' | 'priya' | 'theo';
 export type JudgeState = 'listening' | 'pressing' | 'bidding' | 'out';
 export type JudgeMood = 'skeptical' | 'intrigued' | 'impressed';
+export type JudgeReactionStyle = 'neutral' | 'laughing' | 'exasperated';
+export type AnswerQuality =
+  | 'unrated'
+  | 'unanswered'
+  | 'evasive'
+  | 'weak'
+  | 'credible'
+  | 'exceptional';
 export type JudgeReaction = {
   judgeId: JudgeId;
   state: JudgeState;
@@ -56,6 +64,9 @@ export type JudgeReaction = {
   mood: JudgeMood;
   spoken: string;
   question?: string;
+  reactionStyle?: JudgeReactionStyle;
+  answerQuality?: AnswerQuality;
+  outReason?: string;
 };
 export type Bid = {
   judgeId: JudgeId;
@@ -294,6 +305,32 @@ function portraitPosition(mood: JudgeMood) {
   if (mood === 'impressed') return '100%';
   return '0%';
 }
+function reactionPortraitStyle(judge: (typeof JUDGES)[number], reaction: JudgeReaction) {
+  if (!reaction.reactionStyle || reaction.reactionStyle === 'neutral') {
+    return {
+      backgroundImage: `url(${judge.portrait})`,
+      backgroundPositionX: portraitPosition(reaction.mood),
+      backgroundPositionY: 'center',
+      backgroundSize: '300% 100%',
+    };
+  }
+  const column = JUDGES.findIndex((item) => item.id === judge.id);
+  return {
+    backgroundImage: 'url(/judges/judge-reactions-sprite.png)',
+    backgroundPositionX: `${(column / 3) * 100}%`,
+    backgroundPositionY: reaction.reactionStyle === 'laughing' ? '0%' : '100%',
+    backgroundSize: '400% 200%',
+  };
+}
+
+const EMPTY_ANSWER_QUALITY: Record<AnswerQuality, number> = {
+  unrated: 0,
+  unanswered: 0,
+  evasive: 0,
+  weak: 0,
+  credible: 0,
+  exceptional: 0,
+};
 
 export function PitchArena() {
   const [pitch, setPitch] = useState<PitchState>(DEFAULT_PITCH);
@@ -305,6 +342,7 @@ export function PitchArena() {
   const [voiceOn, setVoiceOn] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
+  const [focusedJudgeId, setFocusedJudgeId] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
   const [launchCount, setLaunchCount] = useState<3 | 2 | 1 | null>(null);
   const [roomCode] = useState(() =>
@@ -351,6 +389,9 @@ export function PitchArena() {
   const evidenceReviewsRef = useRef(evidenceReviews);
   const feedRef = useRef(feed);
   const founderTurnRef = useRef(founderTurn);
+  const answerQualityRef = useRef<Record<AnswerQuality, number>>({
+    ...EMPTY_ANSWER_QUALITY,
+  });
   const responseWaiterRef = useRef<{
     resolve: (value: Record<string, unknown>) => void;
     timer: number;
@@ -367,6 +408,7 @@ export function PitchArena() {
   const voiceAbortRef = useRef<AbortController | null>(null);
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
+  const responseInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     pitchRef.current = pitch;
@@ -574,10 +616,13 @@ export function PitchArena() {
         soundtrack: next?.soundtrack ?? 'game',
         startedAt: Date.now(),
       };
+      reactionsRef.current = DEFAULT_REACTIONS;
       setReactions(DEFAULT_REACTIONS);
       setPanelProfile(createPanelProfile());
       setBids([]);
       setDraft('');
+      setFocusedJudgeId(null);
+      answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
       setFeed(
         openingPitch
           ? [
@@ -665,9 +710,11 @@ export function PitchArena() {
     setReactions(DEFAULT_REACTIONS);
     setBids([]);
     setDraft('');
+    setFocusedJudgeId(null);
     setFeed([]);
     setFounderTurn({ status: 'open' });
     setEvidenceReviews({});
+    answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
     twoMinuteWarningRef.current = false;
     soundtrackStopRef.current?.();
     soundtrackStopRef.current = null;
@@ -682,18 +729,46 @@ export function PitchArena() {
 
   const applyJudgeTurn = useCallback(
     (roundSummary: string, reaction: JudgeReaction) => {
+      const answerQuality = reaction.answerQuality ?? 'unrated';
       const normalized: JudgeReaction = {
         ...reaction,
         interest: clampInterest(reaction.interest),
+        reactionStyle: reaction.reactionStyle ?? 'neutral',
+        answerQuality,
       };
-      setReactions((current) => ({
-        ...current,
+      const nextReactions = {
+        ...reactionsRef.current,
         [reaction.judgeId]: normalized,
-      }));
+      };
+      reactionsRef.current = nextReactions;
+      setReactions(nextReactions);
+      if (answerQuality !== 'unrated') {
+        answerQualityRef.current[answerQuality] += 1;
+      }
+      setFocusedJudgeId(reaction.judgeId);
+      const panelInterest = Math.round(
+        Object.values(nextReactions).reduce(
+          (total, judgeReaction) => total + judgeReaction.interest,
+          0,
+        ) / JUDGES.length,
+      );
+      const qualityAdjustment =
+        answerQuality === 'unanswered'
+          ? -16
+          : answerQuality === 'evasive'
+            ? -12
+            : answerQuality === 'weak'
+              ? -5
+              : answerQuality === 'credible'
+                ? 5
+                : answerQuality === 'exceptional'
+                  ? 10
+                  : 0;
       setPitch((current) => ({
         ...current,
         round: current.round + 1,
         summary: roundSummary,
+        favorability: clampInterest(panelInterest + qualityAdjustment),
       }));
       if (reaction.question) {
         const nextTurn: FounderTurnState = {
@@ -885,10 +960,24 @@ export function PitchArena() {
       winningJudgeId?: JudgeId;
     }) => {
       const snapshot = pitchRef.current;
+      const quality = answerQualityRef.current;
+      const evasiveTotal = quality.evasive + quality.unanswered;
+      const credibleTotal = quality.credible + quality.exceptional;
+      const allJudgesOut = Object.values(reactionsRef.current).every(
+        (reaction) => reaction.state === 'out',
+      );
+      let scoreCap = allJudgesOut ? 30 : 100;
+      if (credibleTotal === 0 && evasiveTotal >= 4) scoreCap = 8;
+      else if (credibleTotal === 0 && evasiveTotal >= 3) scoreCap = 15;
+      else if (evasiveTotal >= 3) scoreCap = Math.min(scoreCap, 24);
+      else if (evasiveTotal >= 2) scoreCap = Math.min(scoreCap, 35);
       const finalPitch = {
         ...snapshot,
         status: 'final' as const,
-        score: Math.max(0, Math.min(100, Math.round(result.score))),
+        score: Math.max(
+          0,
+          Math.min(scoreCap, 100, Math.round(result.score)),
+        ),
         summary: result.summary,
         amountRaised: Math.max(0, Math.round(result.amountRaised)),
         durationSeconds: Math.max(
@@ -1188,6 +1277,12 @@ export function PitchArena() {
   const waitingJudge = founderTurn.judgeId
     ? JUDGES.find((judge) => judge.id === founderTurn.judgeId)
     : undefined;
+  const focusedJudge = focusedJudgeId
+    ? JUDGES.find((judge) => judge.id === focusedJudgeId)
+    : undefined;
+  const focusedReaction = focusedJudgeId
+    ? reactions[focusedJudgeId]
+    : undefined;
   const founderFeed = feed.filter((entry) => entry.kind !== 'judge').slice(-6);
 
   return (
@@ -1340,8 +1435,6 @@ export function PitchArena() {
               speakingJudge === judge.id ||
               (founderTurn.status === 'awaiting' &&
                 founderTurn.judgeId === judge.id);
-            const hasJudgeResponse =
-              reaction.spoken && reaction.spoken !== 'Waiting for the pitch.';
             return (
               <article
                 key={judge.id}
@@ -1351,12 +1444,9 @@ export function PitchArena() {
               >
                 <div className="monitor-bezel">
                   <div
-                    key={`${judge.id}-${reaction.mood}`}
+                    key={`${judge.id}-${reaction.mood}-${reaction.reactionStyle}`}
                     className="monitor-screen screen-change"
-                    style={{
-                      backgroundImage: `url(${judge.portrait})`,
-                      backgroundPositionX: portraitPosition(reaction.mood),
-                    }}
+                    style={reactionPortraitStyle(judge, reaction)}
                   >
                     <div className="crt-scanlines" aria-hidden="true" />
                     <span className="monitor-live">
@@ -1369,6 +1459,12 @@ export function PitchArena() {
                       <strong>{judge.name}</strong>
                       <small>{judge.role}</small>
                     </div>
+                    {reaction.state === 'out' && (
+                      <div className="judge-out-stamp">
+                        <strong>I&apos;M OUT</strong>
+                        <span>{reaction.outReason ?? reaction.spoken}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="monitor-status-strip">
                     <div className="judge-wave" aria-hidden="true">
@@ -1388,12 +1484,6 @@ export function PitchArena() {
                     )}
                   </div>
                 </div>
-                {captionsOn && hasJudgeResponse && (
-                  <div className="judge-response-overlay" aria-live="polite">
-                    <strong>{judge.name}</strong>
-                    <p>“{reaction.spoken}”</p>
-                  </div>
-                )}
               </article>
             );
           })}
@@ -1415,7 +1505,9 @@ export function PitchArena() {
           <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
         </button>
 
-        <div className="room-control-deck">
+        <div
+          className={`room-control-deck ${pitch.status === 'final' ? 'room-control-deck-final' : ''}`}
+        >
           <div className="room-metrics" aria-label="Pitch status">
             <div>
               <span>Favorability</span>
@@ -1560,20 +1652,75 @@ export function PitchArena() {
                   </div>
                 </div>
               ) : pitch.status === 'final' ? (
-                <div className="flex min-h-32 items-center justify-between gap-5 p-5">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#ffc857]">
-                      Pitch closed
-                    </p>
-                    <p className="mt-2 text-lg text-white/82">
-                      The panel has delivered its final verdict.
-                    </p>
+                <div className="arena-final-summary">
+                  <div className="arena-final-score">
+                    <span>Final score</span>
+                    <strong>{pitch.score}</strong>
+                    <small>/100</small>
                   </div>
-                  <div className="text-right">
-                    <strong className="font-display text-4xl text-[#ffc857]">
-                      {pitch.score}
-                    </strong>
-                    <span className="text-xs text-white/30">/100</span>
+                  <div className="arena-final-copy">
+                    <p>THE ROOM&apos;S VERDICT</p>
+                    <h2>{pitch.amountRaised ? 'You got a deal.' : 'No deal.'}</h2>
+                    <blockquote>{pitch.summary}</blockquote>
+                    <div>
+                      <b>Raised {money(pitch.amountRaised ?? 0)}</b>
+                      <span>{formatClock(pitch.durationSeconds ?? 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : focusedJudge && focusedReaction ? (
+                <div
+                  className={`judge-focus-stage ${focusedReaction.state === 'out' ? 'judge-focus-out' : ''}`}
+                  style={
+                    { '--judge-color': focusedJudge.color } as React.CSSProperties
+                  }
+                  aria-live="assertive"
+                >
+                  <div className="judge-focus-portrait-wrap">
+                    <div
+                      key={`${focusedJudge.id}-${focusedReaction.mood}-${focusedReaction.reactionStyle}-focus`}
+                      className="judge-focus-portrait screen-change"
+                      style={reactionPortraitStyle(focusedJudge, focusedReaction)}
+                    >
+                      <div className="crt-scanlines" aria-hidden="true" />
+                      <span>{stateLabel(focusedReaction.state)}</span>
+                      <strong>{focusedJudge.name}</strong>
+                      <small>{focusedJudge.role}</small>
+                      {focusedReaction.state === 'out' && (
+                        <b>I&apos;M OUT</b>
+                      )}
+                    </div>
+                  </div>
+                  <div className="judge-focus-copy">
+                    <span className="judge-focus-kicker">
+                      {focusedReaction.state === 'out'
+                        ? 'Decision delivered'
+                        : `${focusedJudge.name} has the floor`}
+                    </span>
+                    <blockquote>“{focusedReaction.spoken}”</blockquote>
+                    {focusedReaction.question && (
+                      <p className="judge-focus-question">
+                        {focusedReaction.question}
+                      </p>
+                    )}
+                    {focusedReaction.state === 'out' && (
+                      <p className="judge-focus-reason">
+                        <strong>Why:</strong>{' '}
+                        {focusedReaction.outReason ?? focusedReaction.spoken}
+                      </p>
+                    )}
+                    <Button
+                      className="judge-focus-respond"
+                      onClick={() => {
+                        setFocusedJudgeId(null);
+                        window.requestAnimationFrame(() =>
+                          responseInputRef.current?.focus(),
+                        );
+                      }}
+                    >
+                      {focusedReaction.question ? 'Respond' : 'Back to the room'}
+                      <ArrowUpRight data-icon="inline-end" />
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -1627,6 +1774,7 @@ export function PitchArena() {
                     )}
                   </div>
                   <Textarea
+                    ref={responseInputRef}
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     onKeyDown={(event) => {
@@ -1782,20 +1930,6 @@ export function PitchArena() {
               </div>
             )}
           </div>
-          {pitch.status === 'final' && (
-            <div className="room-final-verdict">
-              <span>Panel verdict</span>
-              <strong>
-                {pitch.score}
-                <small>/100</small>
-              </strong>
-              <p>{pitch.summary}</p>
-              <b>
-                Raised {money(pitch.amountRaised ?? 0)} ·{' '}
-                {formatClock(pitch.durationSeconds ?? 0)}
-              </b>
-            </div>
-          )}
         </div>
       </section>
     </main>
