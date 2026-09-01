@@ -6,12 +6,15 @@ export type StoredLeaderboardEntry = {
   id: string;
   founderName: string;
   companyName: string;
+  agentSignature: string;
+  pitchVenue: string;
   score: number;
   amountRaised: number;
   askAmount: number;
   equity: number;
   durationSeconds: number;
   difficulty: string;
+  lifelinesUsed: number;
   openingPitch: string;
   transcript: string;
   verdictSummary: string;
@@ -55,12 +58,15 @@ async function ensureLeaderboard() {
       id TEXT PRIMARY KEY,
       founder_name TEXT NOT NULL,
       company_name TEXT NOT NULL,
+      agent_signature TEXT NOT NULL DEFAULT 'Unspecified WebMCP agent',
+      pitch_venue TEXT NOT NULL DEFAULT 'Attached WebMCP browser',
       score INTEGER NOT NULL,
       amount_raised INTEGER NOT NULL DEFAULT 0,
       ask_amount INTEGER NOT NULL DEFAULT 0,
       equity REAL NOT NULL DEFAULT 0,
       duration_seconds INTEGER NOT NULL DEFAULT 0,
       difficulty TEXT NOT NULL DEFAULT 'medium',
+      lifelines_used INTEGER NOT NULL DEFAULT 0,
       opening_pitch TEXT NOT NULL DEFAULT '',
       transcript TEXT NOT NULL DEFAULT '',
       verdict_summary TEXT NOT NULL DEFAULT '',
@@ -75,8 +81,14 @@ async function ensureLeaderboard() {
   const existing = new Set(columns.results.map((column) => column.name));
   const additions = [
     ['duration_seconds', 'INTEGER NOT NULL DEFAULT 0'],
+    [
+      'agent_signature',
+      "TEXT NOT NULL DEFAULT 'Unspecified WebMCP agent'",
+    ],
+    ['pitch_venue', "TEXT NOT NULL DEFAULT 'Attached WebMCP browser'"],
     ['equity', 'REAL NOT NULL DEFAULT 0'],
     ['difficulty', "TEXT NOT NULL DEFAULT 'medium'"],
+    ['lifelines_used', 'INTEGER NOT NULL DEFAULT 0'],
     ['opening_pitch', "TEXT NOT NULL DEFAULT ''"],
     ['transcript', "TEXT NOT NULL DEFAULT ''"],
     ['verdict_summary', "TEXT NOT NULL DEFAULT ''"],
@@ -97,8 +109,9 @@ async function ensureLeaderboard() {
 }
 
 const detailSelection = `id, founder_name AS founderName, company_name AS companyName,
+  agent_signature AS agentSignature, pitch_venue AS pitchVenue,
   score, amount_raised AS amountRaised, ask_amount AS askAmount, equity,
-  duration_seconds AS durationSeconds, difficulty,
+  duration_seconds AS durationSeconds, difficulty, lifelines_used AS lifelinesUsed,
   opening_pitch AS openingPitch, transcript,
   verdict_summary AS verdictSummary, tool_calls AS toolCalls,
   founder_photo_material_id AS founderPhotoMaterialId, created_at AS createdAt`;
@@ -129,12 +142,15 @@ export async function getLeaderboardEntry(id: string) {
 export async function saveLeaderboardEntry(input: {
   founderName: string;
   companyName: string;
+  agentSignature: string;
+  pitchVenue: string;
   score: number;
   amountRaised: number;
   askAmount: number;
   equity: number;
   durationSeconds: number;
   difficulty: string;
+  lifelinesUsed: number;
   openingPitch: string;
   transcript: string;
   verdictSummary: string;
@@ -146,6 +162,11 @@ export async function saveLeaderboardEntry(input: {
     id: crypto.randomUUID(),
     founderName: input.founderName.slice(0, 80),
     companyName: input.companyName.slice(0, 100),
+    agentSignature:
+      input.agentSignature.trim().slice(0, 120) ||
+      'Unspecified WebMCP agent',
+    pitchVenue:
+      input.pitchVenue.trim().slice(0, 120) || 'Attached WebMCP browser',
     score: Math.max(0, Math.min(100, Math.round(input.score))),
     amountRaised: Math.max(
       0,
@@ -165,6 +186,7 @@ export async function saveLeaderboardEntry(input: {
     )
       ? input.difficulty
       : 'medium',
+    lifelinesUsed: Math.max(0, Math.min(1, Math.round(input.lifelinesUsed))),
     openingPitch: input.openingPitch.slice(0, 12_000),
     transcript: input.transcript.slice(0, 80_000),
     verdictSummary: input.verdictSummary.slice(0, 4_000),
@@ -174,21 +196,24 @@ export async function saveLeaderboardEntry(input: {
   };
   await env.DB.prepare(
     `INSERT INTO leaderboard
-      (id, founder_name, company_name, score, amount_raised, ask_amount, equity,
-       duration_seconds, difficulty, opening_pitch, transcript, verdict_summary,
+      (id, founder_name, company_name, agent_signature, pitch_venue, score, amount_raised, ask_amount, equity,
+       duration_seconds, difficulty, lifelines_used, opening_pitch, transcript, verdict_summary,
        tool_calls, founder_photo_material_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       entry.id,
       entry.founderName,
       entry.companyName,
+      entry.agentSignature,
+      entry.pitchVenue,
       entry.score,
       entry.amountRaised,
       entry.askAmount,
       entry.equity,
       entry.durationSeconds,
       entry.difficulty,
+      entry.lifelinesUsed,
       entry.openingPitch,
       entry.transcript,
       entry.verdictSummary,

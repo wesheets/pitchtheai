@@ -3502,9 +3502,51 @@ textarea {
   color: rgb(255 255 255 / 0.35);
   font: 700 14px var(--font-geist-mono);
 }
+.pitch-agent-signature {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  border: 1px solid rgb(101 230 255 / 0.2);
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  background: linear-gradient(115deg, rgb(4 17 23 / 0.92), rgb(6 7 10 / 0.94));
+}
+.pitch-agent-signature > div {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.pitch-agent-signature svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #65e6ff;
+}
+.pitch-agent-signature span {
+  color: rgb(255 255 255 / 0.42);
+  font: 750 9px var(--font-geist-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.pitch-agent-signature strong {
+  display: block;
+  margin-top: 0.2rem;
+  color: #fff;
+  font: 700 15px var(--font-geist-sans);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.pitch-agent-signature small {
+  max-width: 170px;
+  color: rgb(255 255 255 / 0.34);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .pitch-record-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   margin-top: 2rem;
   overflow: hidden;
   border: 1px solid rgb(255 199 87 / 0.25);
@@ -3538,6 +3580,9 @@ textarea {
 .pitch-record-stats svg {
   width: 16px;
   height: 16px;
+}
+.pitch-record-difficulty {
+  text-transform: capitalize;
 }
 .pitch-record-grid {
   display: grid;
@@ -3727,11 +3772,17 @@ textarea {
   .pitch-record-stats {
     grid-template-columns: 1fr 1fr;
   }
-  .pitch-record-stats > div:nth-child(2) {
+  .pitch-record-stats > div:nth-child(even) {
     border-right: 0;
   }
-  .pitch-record-stats > div:nth-child(-n + 2) {
+  .pitch-record-stats > div:nth-child(-n + 4) {
     border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  }
+  .pitch-agent-signature {
+    grid-template-columns: 1fr;
+  }
+  .pitch-agent-signature small {
+    max-width: none;
   }
   .pitch-record-grid {
     grid-template-columns: 1fr;
@@ -4346,7 +4397,7 @@ textarea {
 }
 .leaderboard-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1660px;
   border-collapse: collapse;
 }
 .leaderboard-table th {
@@ -4387,6 +4438,63 @@ textarea {
 .leaderboard-table td small {
   color: rgb(255 255 255 / 0.25);
   font-size: 11px;
+}
+.leaderboard-founder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: #fff;
+  font-weight: 700;
+}
+.leaderboard-founder img,
+.leaderboard-founder > i {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(255 200 87 / 0.35);
+  border-radius: 50%;
+  object-fit: cover;
+  background: #050609;
+  box-shadow: 0 0 18px rgb(255 196 70 / 0.1);
+}
+.leaderboard-founder > i {
+  display: grid;
+  place-items: center;
+  color: #ffc857;
+  font: 800 15px var(--font-geist-mono);
+  font-style: normal;
+}
+.leaderboard-signature,
+.leaderboard-venue {
+  display: inline-block;
+  max-width: 190px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: normal;
+}
+.leaderboard-signature {
+  color: #8de3ff;
+}
+.leaderboard-venue {
+  color: #ffc857;
+}
+.leaderboard-difficulty,
+.leaderboard-lifeline {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 999px;
+  padding: 0.42rem 0.62rem;
+  color: rgb(255 255 255 / 0.64);
+  background: rgb(255 255 255 / 0.035);
+  font: 750 11px var(--font-geist-mono);
+  text-transform: capitalize;
+}
+.leaderboard-difficulty.difficulty-legendary,
+.leaderboard-lifeline.used {
+  color: #ffc857;
+  border-color: rgb(255 200 87 / 0.34);
+  background: rgb(255 200 87 / 0.07);
 }
 .leaderboard-raised {
   color: #77e0ac !important;

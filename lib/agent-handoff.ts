@@ -19,7 +19,7 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   return [
     'Join the four-judge panel on the already-open Pitch The AI page.',
     `Target room code ${request.roomCode} in the already-open tab whose exact URL is ${request.roomUrl}. Do not navigate that URL or open a new tab because the room state is local to the existing tab. Before starting, call get_pitch_context and confirm its roomCode is exactly ${request.roomCode}. If the first attached Pitch The AI tab does not match, inspect the other already-open Pitch The AI /play tabs and attach the one whose get_pitch_context roomCode is exactly ${request.roomCode}. If no open tab matches, stop and report that the target Pitch The AI room is not attached.`,
-    `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, and the supplied opening pitch.`,
+    `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, agentSignature set to your honest agent/model identity, pitchVenue set to the browser or host app where you are operating (for example “BringMy.ai beta” or “Codex in-app browser”), and the supplied opening pitch. These two self-reported fields become the agent signature on the public pitch receipt, so do not guess or claim a host you are not using.`,
     `Opening pitch: ${pitchText}`,
     'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
     request.equity <= 0

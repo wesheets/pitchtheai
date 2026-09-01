@@ -194,6 +194,8 @@ export type PanelMood =
 type PitchState = {
   founderName: string;
   companyName: string;
+  agentSignature: string;
+  pitchVenue: string;
   askAmount: number;
   equity: number;
   openingPitch: string;
@@ -286,6 +288,8 @@ const JUDGES: Array<{
 const DEFAULT_PITCH: PitchState = {
   founderName: '',
   companyName: '',
+  agentSignature: 'Unspecified WebMCP agent',
+  pitchVenue: 'Attached WebMCP browser',
   askAmount: 0,
   equity: 0,
   openingPitch: '',
@@ -2035,12 +2039,15 @@ export function PitchArena() {
           body: JSON.stringify({
             founderName: finalPitch.founderName,
             companyName: finalPitch.companyName,
+            agentSignature: finalPitch.agentSignature,
+            pitchVenue: finalPitch.pitchVenue,
             score: finalPitch.score,
             amountRaised: finalPitch.amountRaised,
             askAmount: finalPitch.askAmount,
             equity: finalPitch.equity,
             durationSeconds: finalPitch.durationSeconds,
             difficulty: finalPitch.difficulty,
+            lifelinesUsed: judgeLifelineRef.current.usedAt ? 1 : 0,
             openingPitch: finalPitch.openingPitch,
             transcript: feedRef.current
               .map((entry) => `${entry.author.toUpperCase()}\n${entry.text}`)

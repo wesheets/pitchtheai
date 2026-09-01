@@ -49,6 +49,14 @@ export async function POST(request: Request) {
     const entry = await saveLeaderboardEntry({
       founderName: body.founderName,
       companyName: body.companyName,
+      agentSignature:
+        typeof body.agentSignature === 'string'
+          ? body.agentSignature
+          : 'Unspecified WebMCP agent',
+      pitchVenue:
+        typeof body.pitchVenue === 'string'
+          ? body.pitchVenue
+          : 'Attached WebMCP browser',
       score: Number(body.score),
       amountRaised: Number(body.amountRaised),
       askAmount: Number(body.askAmount),
@@ -56,6 +64,7 @@ export async function POST(request: Request) {
       durationSeconds: Number(body.durationSeconds) || 0,
       difficulty:
         typeof body.difficulty === 'string' ? body.difficulty : 'medium',
+      lifelinesUsed: Number(body.lifelinesUsed ?? 0),
       openingPitch:
         typeof body.openingPitch === 'string' ? body.openingPitch : '',
       transcript: typeof body.transcript === 'string' ? body.transcript : '',

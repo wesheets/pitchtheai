@@ -1,10 +1,14 @@
-/* oxlint-disable next/no-html-link-for-pages -- Vinext client routing is bypassed intentionally for reliable hard navigation. */
+/* oxlint-disable next/no-html-link-for-pages, next/no-img-element -- Vinext client routing is bypassed intentionally and material images are served dynamically. */
 import type { Metadata } from 'next';
 import {
   ArrowLeft,
   ArrowUpRight,
   AudioLines,
+  Bot,
   Clock3,
+  Gauge,
+  LifeBuoy,
+  MapPin,
   Trophy,
 } from 'lucide-react';
 
@@ -120,6 +124,18 @@ export default async function LeaderboardPage() {
                     <th>Rank</th>
                     <th>Pitch</th>
                     <th>Founder</th>
+                    <th>
+                      <Bot className="size-3.5" /> Agent signature
+                    </th>
+                    <th>
+                      <MapPin className="size-3.5" /> Pitch venue
+                    </th>
+                    <th>
+                      <Gauge className="size-3.5" /> Difficulty
+                    </th>
+                    <th>
+                      <LifeBuoy className="size-3.5" /> Lifeline
+                    </th>
                     <th>Score</th>
                     <th>Raised</th>
                     <th>Ask</th>
@@ -147,7 +163,45 @@ export default async function LeaderboardPage() {
                           <strong>{entry.companyName}</strong>
                         </a>
                       </td>
-                      <td>{entry.founderName}</td>
+                      <td>
+                        <span className="leaderboard-founder">
+                          {entry.founderPhotoMaterialId ? (
+                            <img
+                              src={`/api/materials?id=${encodeURIComponent(entry.founderPhotoMaterialId)}`}
+                              alt=""
+                            />
+                          ) : (
+                            <i aria-hidden="true">
+                              {entry.founderName.slice(0, 1).toUpperCase()}
+                            </i>
+                          )}
+                          <span>{entry.founderName}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <span className="leaderboard-signature">
+                          {entry.agentSignature}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="leaderboard-venue">
+                          {entry.pitchVenue}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`leaderboard-difficulty difficulty-${entry.difficulty}`}
+                        >
+                          {entry.difficulty}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`leaderboard-lifeline ${entry.lifelinesUsed ? 'used' : ''}`}
+                        >
+                          {entry.lifelinesUsed ? 'Second Chance used' : 'None'}
+                        </span>
+                      </td>
                       <td>
                         <b>{entry.score}</b>
                         <small>/100</small>

@@ -25,6 +25,8 @@ type PitchSnapshot = {
   pitch: {
     founderName: string;
     companyName: string;
+    agentSignature: string;
+    pitchVenue: string;
     askAmount: number;
     equity: number;
     openingPitch: string;
@@ -377,6 +379,18 @@ export function registerPitchTools(options: PitchToolOptions) {
         properties: {
           founderName: { type: 'string', maxLength: 80 },
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
+          agentSignature: {
+            type: 'string',
+            maxLength: 120,
+            description:
+              'Your self-reported agent or model identity for the public pitch receipt, for example Codex · GPT-5.6 Sol.',
+          },
+          pitchVenue: {
+            type: 'string',
+            maxLength: 120,
+            description:
+              'The host browser or application where this pitch is taking place, for example BringMy.ai beta or Codex in-app browser.',
+          },
           askAmount: { type: 'number', minimum: 0, maximum: 1000000000 },
           equity: { type: 'number', minimum: 0, maximum: 100 },
           openingPitch: { type: 'string', maxLength: 6000 },
@@ -395,6 +409,14 @@ export function registerPitchTools(options: PitchToolOptions) {
               ? args.founderName
               : 'Guest founder',
           companyName: String(args.companyName),
+          agentSignature:
+            typeof args.agentSignature === 'string' && args.agentSignature.trim()
+              ? args.agentSignature.trim()
+              : 'Unspecified WebMCP agent',
+          pitchVenue:
+            typeof args.pitchVenue === 'string' && args.pitchVenue.trim()
+              ? args.pitchVenue.trim()
+              : 'Attached WebMCP browser',
           askAmount: Number(args.askAmount),
           equity: Number(args.equity),
           transcript:
@@ -410,6 +432,14 @@ export function registerPitchTools(options: PitchToolOptions) {
           started: true,
           roomCode: optionsRef.current.getSnapshot().roomCode,
           companyName: args.companyName,
+          agentSignature:
+            typeof args.agentSignature === 'string'
+              ? args.agentSignature
+              : 'Unspecified WebMCP agent',
+          pitchVenue:
+            typeof args.pitchVenue === 'string'
+              ? args.pitchVenue
+              : 'Attached WebMCP browser',
           askAmount: args.askAmount,
           equity: args.equity,
           difficulty:

@@ -5,8 +5,12 @@ import {
   ArrowLeft,
   ArrowUpRight,
   AudioLines,
+  Bot,
   Clock3,
+  Gauge,
   Image as ImageIcon,
+  LifeBuoy,
+  MapPin,
   Trophy,
 } from 'lucide-react';
 
@@ -108,6 +112,24 @@ export default async function PitchRecordPage({
           </div>
         </header>
 
+        <section className="pitch-agent-signature" aria-label="Agent signature">
+          <div>
+            <Bot />
+            <span>
+              Agent behind the tools
+              <strong>{entry.agentSignature}</strong>
+            </span>
+          </div>
+          <div>
+            <MapPin />
+            <span>
+              Pitch took place in
+              <strong>{entry.pitchVenue}</strong>
+            </span>
+          </div>
+          <small>Self-reported by the visiting WebMCP agent</small>
+        </section>
+
         <section className="pitch-record-stats">
           <div>
             <span>Raised</span>
@@ -134,6 +156,19 @@ export default async function PitchRecordPage({
                 day: 'numeric',
                 year: 'numeric',
               }).format(new Date(entry.createdAt))}
+            </strong>
+          </div>
+          <div>
+            <span>Difficulty</span>
+            <strong className="pitch-record-difficulty">
+              <Gauge /> {entry.difficulty}
+            </strong>
+          </div>
+          <div>
+            <span>Lifeline</span>
+            <strong>
+              <LifeBuoy />
+              {entry.lifelinesUsed ? 'Second Chance used' : 'Not used'}
             </strong>
           </div>
         </section>
