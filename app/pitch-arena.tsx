@@ -75,6 +75,15 @@ export type Bid = {
   conditions?: string;
   spoken: string;
 };
+export type OfferDecision = {
+  status: 'idle' | 'choosing' | 'answered' | 'timed_out';
+  action?: 'accept' | 'counter' | 'pass';
+  judgeId?: JudgeId;
+  amount?: number;
+  equity?: number;
+  note?: string;
+  deadline?: number;
+};
 export type LeaderboardEntry = {
   id: string;
   founderName: string;
@@ -342,6 +351,15 @@ export function PitchArena() {
   const [reactions, setReactions] =
     useState<Record<JudgeId, JudgeReaction>>(DEFAULT_REACTIONS);
   const [bids, setBids] = useState<Bid[]>([]);
+  const [offerDecision, setOfferDecision] = useState<OfferDecision>({
+    status: 'idle',
+  });
+  const [acceptedBid, setAcceptedBid] = useState<Bid | null>(null);
+  const [counteringJudgeId, setCounteringJudgeId] =
+    useState<JudgeId | null>(null);
+  const [counterAmount, setCounterAmount] = useState('');
+  const [counterEquity, setCounterEquity] = useState('');
+  const [counterNote, setCounterNote] = useState('');
   const [draft, setDraft] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
@@ -387,6 +405,8 @@ export function PitchArena() {
   const pitchRef = useRef(pitch);
   const reactionsRef = useRef(reactions);
   const bidsRef = useRef(bids);
+  const offerDecisionRef = useRef(offerDecision);
+  const acceptedBidRef = useRef(acceptedBid);
   const leaderboardRef = useRef(leaderboard);
   const voiceOnRef = useRef(voiceOn);
   const materialsRef = useRef(materials);
@@ -398,6 +418,10 @@ export function PitchArena() {
     ...EMPTY_ANSWER_QUALITY,
   });
   const responseWaiterRef = useRef<{
+    resolve: (value: Record<string, unknown>) => void;
+    timer: number;
+  } | null>(null);
+  const offerWaiterRef = useRef<{
     resolve: (value: Record<string, unknown>) => void;
     timer: number;
   } | null>(null);
@@ -424,6 +448,12 @@ export function PitchArena() {
   useEffect(() => {
     bidsRef.current = bids;
   }, [bids]);
+  useEffect(() => {
+    offerDecisionRef.current = offerDecision;
+  }, [offerDecision]);
+  useEffect(() => {
+    acceptedBidRef.current = acceptedBid;
+  }, [acceptedBid]);
   useEffect(() => {
     leaderboardRef.current = leaderboard;
   }, [leaderboard]);
@@ -610,6 +640,16 @@ export function PitchArena() {
     async (next?: Partial<PitchState>) => {
       const launchToken = launchTokenRef.current + 1;
       launchTokenRef.current = launchToken;
+      if (responseWaiterRef.current) {
+        window.clearTimeout(responseWaiterRef.current.timer);
+        responseWaiterRef.current.resolve({ status: 'replaced' });
+        responseWaiterRef.current = null;
+      }
+      if (offerWaiterRef.current) {
+        window.clearTimeout(offerWaiterRef.current.timer);
+        offerWaiterRef.current.resolve({ status: 'replaced' });
+        offerWaiterRef.current = null;
+      }
       const openingPitch = next?.transcript?.trim() || draftRef.current.trim();
       const nextPitch: PitchState = {
         ...DEFAULT_PITCH,
@@ -625,6 +665,14 @@ export function PitchArena() {
       setReactions(DEFAULT_REACTIONS);
       setPanelProfile(createPanelProfile());
       setBids([]);
+      offerDecisionRef.current = { status: 'idle' };
+      setOfferDecision({ status: 'idle' });
+      acceptedBidRef.current = null;
+      setAcceptedBid(null);
+      setCounteringJudgeId(null);
+      setCounterAmount('');
+      setCounterEquity('');
+      setCounterNote('');
       setDraft('');
       setFocusedJudgeId(null);
       answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
@@ -714,6 +762,14 @@ export function PitchArena() {
     setPitch(DEFAULT_PITCH);
     setReactions(DEFAULT_REACTIONS);
     setBids([]);
+    offerDecisionRef.current = { status: 'idle' };
+    setOfferDecision({ status: 'idle' });
+    acceptedBidRef.current = null;
+    setAcceptedBid(null);
+    setCounteringJudgeId(null);
+    setCounterAmount('');
+    setCounterEquity('');
+    setCounterNote('');
     setDraft('');
     setFocusedJudgeId(null);
     setFeed([]);
@@ -729,11 +785,25 @@ export function PitchArena() {
       responseWaiterRef.current.resolve({ status: 'cancelled' });
       responseWaiterRef.current = null;
     }
+    if (offerWaiterRef.current) {
+      window.clearTimeout(offerWaiterRef.current.timer);
+      offerWaiterRef.current.resolve({ status: 'cancelled' });
+      offerWaiterRef.current = null;
+    }
     stopVoices();
   }, [stopVoices]);
 
   const applyJudgeTurn = useCallback(
     (roundSummary: string, reaction: JudgeReaction) => {
+      if (
+        offerDecisionRef.current.status === 'answered' &&
+        !acceptedBidRef.current
+      ) {
+        offerDecisionRef.current = { status: 'idle' };
+        setOfferDecision({ status: 'idle' });
+        bidsRef.current = [];
+        setBids([]);
+      }
       const answerQuality = reaction.answerQuality ?? 'unrated';
       const normalized: JudgeReaction = {
         ...reaction,
@@ -903,8 +973,107 @@ export function PitchArena() {
     },
     [appendFeed],
   );
+  const waitForFounderOfferDecision = useCallback(
+    (timeoutSeconds = 12) => {
+      const decision = offerDecisionRef.current;
+      if (decision.status === 'answered') {
+        return Promise.resolve({
+          status: 'answered',
+          action: decision.action,
+          judgeId: decision.judgeId,
+          amount: decision.amount,
+          equity: decision.equity,
+          note: decision.note,
+        });
+      }
+      if (decision.status !== 'choosing') {
+        return Promise.resolve({
+          status: decision.status,
+          message: 'No offer decision is waiting for the founder.',
+        });
+      }
+      if (offerWaiterRef.current) {
+        return Promise.reject(new Error('An offer-decision wait is already active.'));
+      }
+      const deadline = decision.deadline ?? Date.now();
+      const deadlineRemaining = Math.max(0, deadline - Date.now());
+      const waitSlice = Math.max(
+        0,
+        Math.min(timeoutSeconds * 1000, deadlineRemaining),
+      );
+      return new Promise<Record<string, unknown>>((resolve) => {
+        const timer = window.setTimeout(() => {
+          const latest = offerDecisionRef.current;
+          const latestDeadline = latest.deadline ?? deadline;
+          if (latest.status === 'answered') {
+            offerWaiterRef.current = null;
+            resolve({
+              status: 'answered',
+              action: latest.action,
+              judgeId: latest.judgeId,
+              amount: latest.amount,
+              equity: latest.equity,
+              note: latest.note,
+            });
+            return;
+          }
+          if (latest.status !== 'choosing') {
+            offerWaiterRef.current = null;
+            resolve({ status: latest.status });
+            return;
+          }
+          if (Date.now() < latestDeadline) {
+            offerWaiterRef.current = null;
+            resolve({
+              status: 'waiting',
+              offers: bidsRef.current,
+              secondsRemaining: Math.max(
+                1,
+                Math.ceil((latestDeadline - Date.now()) / 1000),
+              ),
+              next: 'Call wait_for_founder_offer_decision again immediately. Do not continue the panel yet.',
+            });
+            return;
+          }
+          const timedOut: OfferDecision = {
+            ...latest,
+            status: 'timed_out',
+          };
+          offerDecisionRef.current = timedOut;
+          setOfferDecision(timedOut);
+          setPitch((current) => ({
+            ...current,
+            favorability: clampInterest(current.favorability - 6),
+            mood: 'tense',
+          }));
+          appendFeed({
+            kind: 'system',
+            author: 'Arena',
+            text: 'The offers expired while the founder stared at the money.',
+          });
+          offerWaiterRef.current = null;
+          resolve({
+            status: 'timed_out',
+            offers: bidsRef.current,
+            waitedSeconds: 45,
+          });
+        }, waitSlice);
+        offerWaiterRef.current = { resolve, timer };
+      });
+    },
+    [appendFeed],
+  );
   const applyJudgeRound = useCallback(
     (roundSummary: string, nextReactions: JudgeReaction[]) => {
+      if (
+        offerDecisionRef.current.status === 'answered' &&
+        !acceptedBidRef.current
+      ) {
+        offerDecisionRef.current = { status: 'idle' };
+        setOfferDecision({ status: 'idle' });
+        bidsRef.current = [];
+        setBids([]);
+      }
       const normalized = Object.fromEntries(
         nextReactions.map((reaction) => [
           reaction.judgeId,
@@ -939,6 +1108,20 @@ export function PitchArena() {
   const applyBidRound = useCallback(
     (nextBids: Bid[]) => {
       setBids(nextBids);
+      bidsRef.current = nextBids;
+      setFocusedJudgeId(null);
+      acceptedBidRef.current = null;
+      setAcceptedBid(null);
+      setCounteringJudgeId(null);
+      setCounterAmount('');
+      setCounterEquity('');
+      setCounterNote('');
+      const nextDecision: OfferDecision = {
+        status: 'choosing',
+        deadline: Date.now() + 45_000,
+      };
+      offerDecisionRef.current = nextDecision;
+      setOfferDecision(nextDecision);
       setReactions((current) => {
         const updated = { ...current };
         for (const bid of nextBids) {
@@ -951,12 +1134,119 @@ export function PitchArena() {
         }
         return updated;
       });
+      setPitch((current) => ({
+        ...current,
+        round: current.round + 1,
+        mood: nextBids.length > 1 ? 'excited' : current.mood,
+        summary:
+          nextBids.length > 1
+            ? 'The judges are bidding against each other.'
+            : 'An offer is on the table.',
+      }));
+      appendFeed({
+        kind: 'system',
+        author: 'Deal desk',
+        text:
+          nextBids.length > 1
+            ? `${nextBids.length} competing offers are live. Choose, counter, or reject them.`
+            : 'An offer is live. Accept it, counter it, or walk away.',
+      });
       speak(
         nextBids.map((bid) => ({ judgeId: bid.judgeId, text: bid.spoken })),
       );
     },
-    [speak],
+    [appendFeed, speak],
   );
+  const submitOfferDecision = useCallback(
+    (decision: Omit<OfferDecision, 'status' | 'deadline'>) => {
+      const answered: OfferDecision = {
+        ...decision,
+        status: 'answered',
+      };
+      offerDecisionRef.current = answered;
+      setOfferDecision(answered);
+      if (decision.action === 'accept' && decision.judgeId) {
+        const selected = bidsRef.current.find(
+          (bid) => bid.judgeId === decision.judgeId,
+        );
+        if (selected) {
+          acceptedBidRef.current = selected;
+          setAcceptedBid(selected);
+          appendFeed({
+            kind: 'system',
+            author: 'Deal desk',
+            text: `Founder selected ${JUDGES.find((judge) => judge.id === selected.judgeId)?.name ?? selected.judgeId}: ${money(selected.amount)} for ${selected.equity}%.`,
+          });
+        }
+      } else {
+        acceptedBidRef.current = null;
+        setAcceptedBid(null);
+        appendFeed({
+          kind: 'founder',
+          author: 'Founder',
+          text:
+            decision.action === 'counter'
+              ? `Counter to ${JUDGES.find((judge) => judge.id === decision.judgeId)?.name ?? 'the judge'}: ${money(decision.amount ?? 0)} for ${decision.equity}%${decision.note ? ` — ${decision.note}` : ''}`
+              : 'Founder rejected every offer on the table.',
+        });
+      }
+      if (offerWaiterRef.current) {
+        window.clearTimeout(offerWaiterRef.current.timer);
+        offerWaiterRef.current.resolve({
+          status: 'answered',
+          action: answered.action,
+          judgeId: answered.judgeId,
+          amount: answered.amount,
+          equity: answered.equity,
+          note: answered.note,
+        });
+        offerWaiterRef.current = null;
+      } else {
+        setHandoffMessage(
+          'Offer decision recorded. Resume the agent so the judges can react.',
+        );
+      }
+      setCounteringJudgeId(null);
+    },
+    [appendFeed],
+  );
+  const acceptOffer = useCallback(
+    (bid: Bid) => {
+      submitOfferDecision({
+        action: 'accept',
+        judgeId: bid.judgeId,
+        amount: bid.amount,
+        equity: bid.equity,
+        note: bid.conditions,
+      });
+    },
+    [submitOfferDecision],
+  );
+  const beginCounterOffer = useCallback((bid: Bid) => {
+    setCounteringJudgeId(bid.judgeId);
+    setCounterAmount(String(bid.amount));
+    setCounterEquity(String(bid.equity));
+    setCounterNote('');
+  }, []);
+  const submitCounterOffer = useCallback(() => {
+    if (!counteringJudgeId) return;
+    const amount = Math.max(1, Math.round(Number(counterAmount)));
+    const equity = Math.max(0, Math.min(100, Number(counterEquity)));
+    if (!Number.isFinite(amount) || !Number.isFinite(equity)) return;
+    submitOfferDecision({
+      action: 'counter',
+      judgeId: counteringJudgeId,
+      amount,
+      equity,
+      note: counterNote.trim() || undefined,
+    });
+  }, [
+    counterAmount,
+    counterEquity,
+    counterNote,
+    counteringJudgeId,
+    submitOfferDecision,
+  ]);
   const finalizePitch = useCallback(
     async (result: {
       score: number;
@@ -1029,6 +1319,8 @@ export function PitchArena() {
           ...reactionsRef.current[judge.id],
         })),
         bids: bidsRef.current,
+        offerDecision: offerDecisionRef.current,
+        acceptedBid: acceptedBidRef.current,
         materials: materialsRef.current.map((material) => ({
           ...material,
           url: new URL(material.url, window.location.href).toString(),
@@ -1052,6 +1344,7 @@ export function PitchArena() {
       applyJudgeTurn,
       reviewPitchEvidence,
       waitForFounderResponse,
+      waitForFounderOfferDecision,
       applyBidRound,
       finalizePitch,
       fetchLeaderboard,
@@ -1068,6 +1361,7 @@ export function PitchArena() {
     updatePitchDetails,
     reviewPitchEvidence,
     roomCode,
+    waitForFounderOfferDecision,
     waitForFounderResponse,
   ]);
 
@@ -1109,6 +1403,21 @@ export function PitchArena() {
     const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
   }, [founderTurn]);
+
+  useEffect(() => {
+    if (offerDecision.status !== 'choosing' || !offerDecision.deadline) return;
+    const tick = () => {
+      setResponseSecondsLeft(
+        Math.max(
+          0,
+          Math.ceil((offerDecision.deadline! - Date.now()) / 1000),
+        ),
+      );
+    };
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [offerDecision]);
 
   const submitFounderResponse = useCallback(
     (response: string) => {
@@ -1275,6 +1584,9 @@ export function PitchArena() {
       ),
     [bids],
   );
+  const acceptedJudge = acceptedBid
+    ? JUDGES.find((judge) => judge.id === acceptedBid.judgeId)
+    : undefined;
   const pendingEvidenceCount = useMemo(
     () => materials.filter((material) => !evidenceReviews[material.id]).length,
     [evidenceReviews, materials],
@@ -1313,9 +1625,9 @@ export function PitchArena() {
           >
             <span className="tool-dot" />
             {agentHost === 'bringmyai'
-              ? '10 tools + agent bridge'
+              ? '11 tools + agent bridge'
               : toolStatus === 'ready'
-                ? '10 site tools live'
+                ? '11 site tools live'
                 : 'Site tools in Codex / ChatGPT'}
           </span>
           <span
@@ -1697,11 +2009,169 @@ export function PitchArena() {
                     <h2>{pitch.amountRaised ? 'You got a deal.' : 'No deal.'}</h2>
                     <blockquote>{pitch.summary}</blockquote>
                     <div>
-                      <b>Raised {money(pitch.amountRaised ?? 0)}</b>
+                      <b>
+                        {acceptedBid
+                          ? `Deal with ${acceptedJudge?.name ?? acceptedBid.judgeId}: ${money(acceptedBid.amount)} for ${acceptedBid.equity}%`
+                          : `Raised ${money(pitch.amountRaised ?? 0)}`}
+                      </b>
                       <span>{formatClock(pitch.durationSeconds ?? 0)}</span>
                     </div>
                   </div>
                 </div>
+              ) : offerDecision.status === 'choosing' || acceptedBid ? (
+                <section className="deal-table" aria-live="assertive">
+                  {acceptedBid ? (
+                    <div
+                      className="deal-selected"
+                      style={
+                        {
+                          '--judge-color': acceptedJudge?.color ?? '#ffc857',
+                        } as React.CSSProperties
+                      }
+                    >
+                      <span>Founder&apos;s decision</span>
+                      <h2>DEAL SELECTED</h2>
+                      <p>
+                        {acceptedJudge?.name ?? acceptedBid.judgeId}
+                        <strong>
+                          {money(acceptedBid.amount)} for {acceptedBid.equity}%
+                        </strong>
+                      </p>
+                      {acceptedBid.conditions && (
+                        <blockquote>{acceptedBid.conditions}</blockquote>
+                      )}
+                      <small>
+                        The founder chose the investor. Waiting for the panel&apos;s
+                        final verdict.
+                      </small>
+                    </div>
+                  ) : (
+                    <>
+                      <header className="deal-table-header">
+                        <div>
+                          <span>
+                            {bids.length > 1
+                              ? 'Live bidding war'
+                              : 'Offer on the table'}
+                          </span>
+                          <h2>You control the deal.</h2>
+                          <p>
+                            Choose an investor, counter one offer, or walk away
+                            from all of them.
+                          </p>
+                        </div>
+                        <b>
+                          {String(
+                            Math.floor(responseSecondsLeft / 60),
+                          ).padStart(2, '0')}
+                          :{String(responseSecondsLeft % 60).padStart(2, '0')}
+                        </b>
+                      </header>
+                      <div
+                        className={`deal-offer-grid deal-offer-grid-${Math.min(bids.length, 4)}`}
+                      >
+                        {bids.map((bid) => {
+                          const judge = JUDGES.find(
+                            (item) => item.id === bid.judgeId,
+                          );
+                          const isCountering =
+                            counteringJudgeId === bid.judgeId;
+                          return (
+                            <article
+                              key={bid.judgeId}
+                              className={`deal-offer-card ${isCountering ? 'deal-offer-countering' : ''}`}
+                              style={
+                                {
+                                  '--judge-color': judge?.color ?? '#ffc857',
+                                } as React.CSSProperties
+                              }
+                            >
+                              <span>{judge?.name ?? bid.judgeId}</span>
+                              <strong>{money(bid.amount)}</strong>
+                              <b>for {bid.equity}%</b>
+                              {bid.conditions && <p>{bid.conditions}</p>}
+                              <div>
+                                <button onClick={() => acceptOffer(bid)}>
+                                  Accept
+                                </button>
+                                <button onClick={() => beginCounterOffer(bid)}>
+                                  Counter
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                      {counteringJudgeId && (
+                        <form
+                          className="deal-counter-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            submitCounterOffer();
+                          }}
+                        >
+                          <div>
+                            <span>Countering</span>
+                            <strong>
+                              {JUDGES.find(
+                                (judge) => judge.id === counteringJudgeId,
+                              )?.name ?? counteringJudgeId}
+                            </strong>
+                          </div>
+                          <label htmlFor="counter-amount">
+                            <span>Amount</span>
+                            <Input
+                              id="counter-amount"
+                              type="number"
+                              min={1}
+                              value={counterAmount}
+                              onChange={(event) =>
+                                setCounterAmount(event.target.value)
+                              }
+                            />
+                          </label>
+                          <label htmlFor="counter-equity">
+                            <span>Equity %</span>
+                            <Input
+                              id="counter-equity"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              value={counterEquity}
+                              onChange={(event) =>
+                                setCounterEquity(event.target.value)
+                              }
+                            />
+                          </label>
+                          <Input
+                            aria-label="Counter conditions"
+                            value={counterNote}
+                            onChange={(event) =>
+                              setCounterNote(event.target.value)
+                            }
+                            placeholder="Optional condition"
+                          />
+                          <Button type="submit">Send counter</Button>
+                          <button
+                            type="button"
+                            onClick={() => setCounteringJudgeId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </form>
+                      )}
+                      <button
+                        className="deal-pass"
+                        onClick={() =>
+                          submitOfferDecision({ action: 'pass' })
+                        }
+                      >
+                        Reject every offer
+                      </button>
+                    </>
+                  )}
+                </section>
               ) : focusedJudge && focusedReaction ? (
                 <div
                   className={`judge-focus-stage ${focusedReaction.state === 'out' ? 'judge-focus-out' : ''}`}

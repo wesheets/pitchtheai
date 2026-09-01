@@ -4,6 +4,7 @@ import type {
   JudgeMood,
   JudgeReaction,
   LeaderboardEntry,
+  OfferDecision,
   PanelMood,
   PitchDetailsUpdate,
   EvidenceReview,
@@ -55,6 +56,8 @@ type PitchSnapshot = {
     outReason?: string;
   }>;
   bids: Bid[];
+  offerDecision: OfferDecision;
+  acceptedBid: Bid | null;
   materials: PitchMaterial[];
   conversation: PitchFeedEntry[];
   founderTurn: FounderTurnState;
@@ -147,6 +150,9 @@ export function registerPitchTools(options: {
   waitForFounderResponse: (
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
+  waitForFounderOfferDecision: (
+    timeoutSeconds?: number,
+  ) => Promise<Record<string, unknown>>;
   applyBidRound: (bids: Bid[]) => void;
   finalizePitch: (result: {
     score: number;
@@ -182,6 +188,20 @@ export function registerPitchTools(options: {
     if (options.getSnapshot().founderTurn.status === 'awaiting') {
       throw new Error(
         'The founder has not answered the current judge. Call wait_for_founder_response before posting another turn.',
+      );
+    }
+  };
+  const requireOfferDecisionComplete = () => {
+    if (options.getSnapshot().offerDecision.status === 'choosing') {
+      throw new Error(
+        'The founder is choosing between live offers. Call wait_for_founder_offer_decision before continuing the panel.',
+      );
+    }
+  };
+  const requireNoAcceptedDeal = () => {
+    if (options.getSnapshot().acceptedBid) {
+      throw new Error(
+        'The founder already accepted an offer. Close the pitch with post_panel_verdict using that exact deal.',
       );
     }
   };
@@ -290,7 +310,7 @@ export function registerPitchTools(options: {
     {
       name: 'get_pitch_context',
       description:
-        'Read this tab\'s unique room code, opening draft, live pitch transcript, founder/judge dialogue, current response gate, timer, ask, uploaded evidence links, prior offers, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. Evaluate the exact answer before continuing. Never invent a founder answer. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
+        'Read this tab\'s unique room code, opening draft, live pitch transcript, founder/judge dialogue, response gate, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive short slices until it returns answered or timed_out. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder\'s exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -364,6 +384,8 @@ export function registerPitchTools(options: {
       execute: (args) => {
         requireEvidenceReview();
         requireFounderTurnComplete();
+        requireOfferDecisionComplete();
+        requireNoAcceptedDeal();
         const judge = args.judge as JudgeReaction;
         if (
           judge.state === 'out' &&
@@ -425,6 +447,8 @@ export function registerPitchTools(options: {
       execute: (args) => {
         requireEvidenceReview();
         requireFounderTurnComplete();
+        requireOfferDecisionComplete();
+        requireNoAcceptedDeal();
         const judges = args.judges as JudgeReaction[];
         if (new Set(judges.map((judge) => judge.judgeId)).size !== 4) {
           throw new Error('Provide exactly one reaction for each judge.');
@@ -445,14 +469,14 @@ export function registerPitchTools(options: {
     {
       name: 'post_bid_round',
       description:
-        'Create a visible, spoken competitive bid round when at least two judges strongly want the deal. In a voice chat, let the arena speak the offers instead of reading them yourself, and write amounts as natural spoken words. Judges may counter, steal, or form a joint offer. Keep offers coherent with the founder’s ask and prior reactions; use escalating counteroffers only when the pitch earned genuine competition.',
+        'Put one or more visible offers on the founder’s deal table. Two or more offers create a competitive bidding round; one offer may answer a founder counter. The founder—not the agent—must then choose a judge, counter one offer, or reject them all. Immediately call wait_for_founder_offer_decision in consecutive short slices and do not continue until it returns answered or timed_out. Judges may steal, improve, or form a joint offer, but every offer must be earned by the live pitch.',
       inputSchema: {
         type: 'object',
         required: ['bids'],
         properties: {
           bids: {
             type: 'array',
-            minItems: 2,
+            minItems: 1,
             maxItems: 4,
             items: {
               type: 'object',
@@ -460,7 +484,7 @@ export function registerPitchTools(options: {
               properties: {
                 judgeId: judgeIdSchema,
                 amount: { type: 'number', minimum: 1, maximum: 1000000000 },
-                equity: { type: 'number', minimum: 0.1, maximum: 100 },
+                equity: { type: 'number', minimum: 0, maximum: 100 },
                 conditions: { type: 'string', maxLength: 300 },
                 spoken: { type: 'string', minLength: 1, maxLength: 500 },
               },
@@ -473,6 +497,8 @@ export function registerPitchTools(options: {
       execute: (args) => {
         requireEvidenceReview();
         requireFounderTurnComplete();
+        requireOfferDecisionComplete();
+        requireNoAcceptedDeal();
         const bids = args.bids as Bid[];
         if (new Set(bids.map((bid) => bid.judgeId)).size !== bids.length) {
           throw new Error(
@@ -480,8 +506,33 @@ export function registerPitchTools(options: {
           );
         }
         options.applyBidRound(bids);
-        return { posted: true, bids };
+        return {
+          posted: true,
+          bids,
+          next: 'Call wait_for_founder_offer_decision now. The founder controls the deal.',
+        };
       },
+    },
+    {
+      name: 'wait_for_founder_offer_decision',
+      description:
+        'Wait up to 12 seconds for the founder to accept one judge’s offer, counter a specific judge with exact amount and equity, or reject every offer. The deal table keeps one shared 45-second deadline across calls. If the result is waiting, call this tool again immediately. Never choose a deal for the founder. If the founder accepts, close with post_panel_verdict using the exact accepted judge, amount, and equity. If the founder counters, let that judge accept, reject, or improve the deal through another post_bid_round.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          timeoutSeconds: {
+            type: 'number',
+            minimum: 1,
+            maximum: 12,
+            default: 12,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) =>
+        options.waitForFounderOfferDecision(
+          typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
+        ),
     },
     {
       name: 'post_panel_verdict',
@@ -501,11 +552,30 @@ export function registerPitchTools(options: {
       execute: async (args) => {
         requireEvidenceReview();
         requireFounderTurnComplete();
+        requireOfferDecisionComplete();
+        const snapshot = options.getSnapshot();
+        const acceptedBid = snapshot.acceptedBid;
+        const amountRaised = Number(args.amountRaised);
+        const winningJudgeId = args.winningJudgeId as JudgeId | undefined;
+        if (acceptedBid) {
+          if (
+            amountRaised !== acceptedBid.amount ||
+            winningJudgeId !== acceptedBid.judgeId
+          ) {
+            throw new Error(
+              `The founder accepted ${acceptedBid.judgeId}'s exact offer of ${acceptedBid.amount} for ${acceptedBid.equity}%. Use that amountRaised and winningJudgeId.`,
+            );
+          }
+        } else if (amountRaised > 0) {
+          throw new Error(
+            'No offer was accepted by the founder. amountRaised must be 0.',
+          );
+        }
         const result = await options.finalizePitch({
           score: Number(args.score),
           summary: String(args.summary),
-          amountRaised: Number(args.amountRaised),
-          winningJudgeId: args.winningJudgeId as JudgeId | undefined,
+          amountRaised,
+          winningJudgeId,
         });
         return { saved: true, verdict: result };
       },
