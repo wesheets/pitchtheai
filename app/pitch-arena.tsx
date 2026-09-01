@@ -168,6 +168,17 @@ type PanelProfile = {
   >;
 };
 
+type QueuedPitchSession = {
+  version: 1;
+  roomCode: string;
+  founderName: string;
+  companyName: string;
+  askAmount: number;
+  equity: number;
+  openingPitch: string;
+  handoffMessage: string;
+};
+
 const JUDGES: Array<{
   id: JudgeId;
   name: string;
@@ -218,11 +229,80 @@ const DEFAULT_PITCH: PitchState = {
   transcript: '',
   status: 'lobby',
   round: 0,
-  secondsLeft: 8 * 60,
+  secondsLeft: 20 * 60,
   favorability: 50,
   mood: 'skeptical',
   soundtrack: 'cinematic',
 };
+
+const ROOM_CODE_STORAGE_KEY = 'pitchtheai.room-code.v1';
+const QUEUED_PITCH_STORAGE_KEY = 'pitchtheai.queued-pitch.v1';
+
+function createRoomCode() {
+  return crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase();
+}
+
+function validRoomCode(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-F0-9]{6}$/.test(value);
+}
+
+function readQueuedPitchSession(): QueuedPitchSession | null {
+  try {
+    const raw = window.sessionStorage.getItem(QUEUED_PITCH_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<QueuedPitchSession>;
+    if (
+      value.version !== 1 ||
+      !validRoomCode(value.roomCode) ||
+      typeof value.founderName !== 'string' ||
+      typeof value.companyName !== 'string' ||
+      typeof value.askAmount !== 'number' ||
+      typeof value.equity !== 'number' ||
+      typeof value.openingPitch !== 'string' ||
+      typeof value.handoffMessage !== 'string'
+    )
+      return null;
+    return value as QueuedPitchSession;
+  } catch {
+    return null;
+  }
+}
+
+function writeRoomCode(roomCode: string) {
+  try {
+    window.sessionStorage.setItem(ROOM_CODE_STORAGE_KEY, roomCode);
+  } catch {
+    // The room still works for this page load when browser storage is disabled.
+  }
+}
+
+function readRoomCode() {
+  try {
+    return window.sessionStorage.getItem(ROOM_CODE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeQueuedPitchSession(session: QueuedPitchSession) {
+  writeRoomCode(session.roomCode);
+  try {
+    window.sessionStorage.setItem(
+      QUEUED_PITCH_STORAGE_KEY,
+      JSON.stringify(session),
+    );
+  } catch {
+    // The copied handoff remains valid for this page load.
+  }
+}
+
+function clearQueuedPitchSession() {
+  try {
+    window.sessionStorage.removeItem(QUEUED_PITCH_STORAGE_KEY);
+  } catch {
+    // Nothing else is required when browser storage is unavailable.
+  }
+}
 
 const MOOD_META: Record<PanelMood, { emoji: string; label: string }> = {
   skeptical: { emoji: '🤨', label: 'Skeptical' },
@@ -372,11 +452,8 @@ export function PitchArena() {
   const [focusedJudgeId, setFocusedJudgeId] = useState<JudgeId | null>(null);
   const [musicOn, setMusicOn] = useState(false);
   const [launchCount, setLaunchCount] = useState<3 | 2 | 1 | null>(null);
-  const [roomCode] = useState(() =>
-    typeof window === 'undefined'
-      ? '------'
-      : crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase(),
-  );
+  const [roomCode, setRoomCode] = useState('------');
+  const [roomReady, setRoomReady] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [panelProfile, setPanelProfile] = useState<PanelProfile>(() =>
@@ -442,6 +519,39 @@ export function PitchArena() {
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
   const responseInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const hydrateRoom = window.setTimeout(() => {
+      const queued = readQueuedPitchSession();
+      const storedRoomCode = readRoomCode();
+      const restoredRoomCode = queued?.roomCode ?? storedRoomCode;
+      const nextRoomCode = validRoomCode(restoredRoomCode)
+        ? restoredRoomCode
+        : createRoomCode();
+
+      writeRoomCode(nextRoomCode);
+      setRoomCode(nextRoomCode);
+
+      if (queued && queued.roomCode === nextRoomCode) {
+        const restoredPitch: PitchState = {
+          ...DEFAULT_PITCH,
+          founderName: queued.founderName,
+          companyName: queued.companyName,
+          askAmount: queued.askAmount,
+          equity: queued.equity,
+        };
+        pitchRef.current = restoredPitch;
+        draftRef.current = queued.openingPitch;
+        setPitch(restoredPitch);
+        setDraft(queued.openingPitch);
+        setHandoffStatus('waiting');
+        setHandoffMessage(queued.handoffMessage);
+      }
+
+      setRoomReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrateRoom);
+  }, []);
 
   useEffect(() => {
     pitchRef.current = pitch;
@@ -642,6 +752,7 @@ export function PitchArena() {
 
   const startPitch = useCallback(
     async (next?: Partial<PitchState>) => {
+      clearQueuedPitchSession();
       const launchToken = launchTokenRef.current + 1;
       launchTokenRef.current = launchToken;
       if (responseWaiterRef.current) {
@@ -661,7 +772,7 @@ export function PitchArena() {
         transcript: openingPitch,
         status: 'live',
         round: 0,
-        secondsLeft: 8 * 60,
+        secondsLeft: 20 * 60,
         soundtrack: next?.soundtrack ?? 'game',
         startedAt: Date.now(),
       };
@@ -713,6 +824,11 @@ export function PitchArena() {
     [stopVoices],
   );
   const requestAgent = useCallback(async () => {
+    if (!roomReady || !validRoomCode(roomCode)) {
+      setHandoffStatus('error');
+      setHandoffMessage('The room is still initializing. Try again.');
+      return;
+    }
     const companyName = pitch.companyName.trim();
     if (!companyName || companyName === 'Untitled venture') {
       setHandoffStatus('error');
@@ -733,12 +849,22 @@ export function PitchArena() {
       });
       setAgentHost(result.host);
       if (pitchRef.current.status === 'live') return;
-      setHandoffStatus('waiting');
-      setHandoffMessage(
+      const waitingMessage =
         result.host === 'bringmyai'
           ? 'Request sent to your selected agent. The clock starts when it joins.'
-          : 'Panel prompt copied. Paste and send it in Codex; the clock starts when the agent joins.',
-      );
+          : 'Panel prompt copied. Paste and send it in Codex; the clock starts when the agent joins.';
+      writeQueuedPitchSession({
+        version: 1,
+        roomCode,
+        founderName: pitch.founderName,
+        companyName,
+        askAmount: pitch.askAmount,
+        equity: pitch.equity,
+        openingPitch: draft,
+        handoffMessage: waitingMessage,
+      });
+      setHandoffStatus('waiting');
+      setHandoffMessage(waitingMessage);
     } catch (error) {
       setHandoffStatus('error');
       setHandoffMessage(
@@ -747,7 +873,7 @@ export function PitchArena() {
           : 'The agent handoff did not start.',
       );
     }
-  }, [draft, enableMusic, pitch, roomCode]);
+  }, [draft, enableMusic, pitch, roomCode, roomReady]);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -761,6 +887,7 @@ export function PitchArena() {
     }));
   }, []);
   const resetPitch = useCallback(() => {
+    clearQueuedPitchSession();
     launchTokenRef.current += 1;
     setLaunchCount(null);
     setPitch(DEFAULT_PITCH);
@@ -1337,6 +1464,7 @@ export function PitchArena() {
   );
 
   useEffect(() => {
+    if (!roomReady || !validRoomCode(roomCode)) return;
     const unregister = registerPitchTools({
       getSnapshot: () => ({
         roomCode,
@@ -1391,6 +1519,7 @@ export function PitchArena() {
     updatePitchDetails,
     reviewPitchEvidence,
     roomCode,
+    roomReady,
     waitForFounderOfferDecision,
     waitForFounderResponse,
   ]);
@@ -1904,6 +2033,7 @@ export function PitchArena() {
               <i />
               <button
                 onClick={() => {
+                  clearQueuedPitchSession();
                   setHandoffStatus('idle');
                   setHandoffMessage(
                     'Edit your pitch, then send a fresh prompt.',
@@ -2068,7 +2198,7 @@ export function PitchArena() {
                     <Button
                       className="h-8 bg-[#ffc857] text-black hover:bg-[#ffd77e]"
                       onClick={() => void requestAgent()}
-                      disabled={handoffStatus === 'requesting'}
+                      disabled={handoffStatus === 'requesting' || !roomReady}
                     >
                       {handoffStatus === 'requesting'
                         ? 'Calling your agent…'

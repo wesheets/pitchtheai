@@ -83,6 +83,30 @@ type RegisterToolArgs = {
   execute: (args: Record<string, unknown>) => unknown;
 };
 
+type PitchToolOptions = {
+  getSnapshot: () => PitchSnapshot;
+  startPitch: (next?: Partial<PitchSnapshot['pitch']>) => Promise<void>;
+  updatePitchDetails: (update: PitchDetailsUpdate) => void;
+  applyJudgeRound: (roundSummary: string, reactions: JudgeReaction[]) => void;
+  applyJudgeTurn: (roundSummary: string, reaction: JudgeReaction) => void;
+  reviewPitchEvidence: (reviews: EvidenceReview[]) => void;
+  waitForFounderResponse: (
+    timeoutSeconds?: number,
+  ) => Promise<Record<string, unknown>>;
+  waitForFounderOfferDecision: (
+    timeoutSeconds?: number,
+  ) => Promise<Record<string, unknown>>;
+  applyBidRound: (bids: Bid[]) => void;
+  finalizePitch: (result: {
+    score: number;
+    summary: string;
+    amountRaised: number;
+    winningJudgeId?: JudgeId;
+  }) => Promise<PitchSnapshot['pitch']>;
+  fetchLeaderboard: () => Promise<LeaderboardEntry[]>;
+  onStatus: (status: ToolStatus) => void;
+};
+
 declare global {
   interface Document {
     modelContext?: {
@@ -90,6 +114,41 @@ declare global {
       unregisterTool?: (name: string) => Promise<void> | void;
     };
   }
+}
+
+type ModelContext = NonNullable<Document['modelContext']>;
+type ActivePitchToolRegistration = {
+  modelContext: ModelContext;
+  optionsRef: { current: PitchToolOptions };
+  registered: Set<string>;
+  leases: number;
+  disposeTimer: ReturnType<typeof setTimeout> | null;
+  disposed: boolean;
+};
+
+let activePitchToolRegistration: ActivePitchToolRegistration | null = null;
+
+function disposePitchToolRegistration(
+  registration: ActivePitchToolRegistration,
+) {
+  if (registration.disposed) return;
+  registration.disposed = true;
+  if (registration.disposeTimer) clearTimeout(registration.disposeTimer);
+  if (activePitchToolRegistration === registration)
+    activePitchToolRegistration = null;
+  for (const name of registration.registered)
+    void registration.modelContext.unregisterTool?.(name);
+  registration.registered.clear();
+}
+
+function releasePitchToolRegistration(
+  registration: ActivePitchToolRegistration,
+) {
+  registration.leases = Math.max(0, registration.leases - 1);
+  if (registration.leases > 0 || registration.disposed) return;
+  registration.disposeTimer = setTimeout(() => {
+    if (registration.leases === 0) disposePitchToolRegistration(registration);
+  }, 100);
 }
 
 const judgeIdSchema = {
@@ -140,29 +199,7 @@ const reactionSchema = {
   additionalProperties: false,
 };
 
-export function registerPitchTools(options: {
-  getSnapshot: () => PitchSnapshot;
-  startPitch: (next?: Partial<PitchSnapshot['pitch']>) => Promise<void>;
-  updatePitchDetails: (update: PitchDetailsUpdate) => void;
-  applyJudgeRound: (roundSummary: string, reactions: JudgeReaction[]) => void;
-  applyJudgeTurn: (roundSummary: string, reaction: JudgeReaction) => void;
-  reviewPitchEvidence: (reviews: EvidenceReview[]) => void;
-  waitForFounderResponse: (
-    timeoutSeconds?: number,
-  ) => Promise<Record<string, unknown>>;
-  waitForFounderOfferDecision: (
-    timeoutSeconds?: number,
-  ) => Promise<Record<string, unknown>>;
-  applyBidRound: (bids: Bid[]) => void;
-  finalizePitch: (result: {
-    score: number;
-    summary: string;
-    amountRaised: number;
-    winningJudgeId?: JudgeId;
-  }) => Promise<PitchSnapshot['pitch']>;
-  fetchLeaderboard: () => Promise<LeaderboardEntry[]>;
-  onStatus: (status: ToolStatus) => void;
-}) {
+export function registerPitchTools(options: PitchToolOptions) {
   if (
     typeof document === 'undefined' ||
     typeof document.modelContext?.registerTool !== 'function'
@@ -171,13 +208,39 @@ export function registerPitchTools(options: {
     return () => undefined;
   }
 
-  const registered: string[] = [];
+  const modelContext = document.modelContext;
+  const existing = activePitchToolRegistration;
+  if (existing && existing.modelContext === modelContext && !existing.disposed) {
+    if (existing.disposeTimer) {
+      clearTimeout(existing.disposeTimer);
+      existing.disposeTimer = null;
+    }
+    existing.optionsRef.current = options;
+    existing.leases += 1;
+    return () => releasePitchToolRegistration(existing);
+  }
+  if (existing) disposePitchToolRegistration(existing);
+
+  const registration: ActivePitchToolRegistration = {
+    modelContext,
+    optionsRef: { current: options },
+    registered: new Set<string>(),
+    leases: 1,
+    disposeTimer: null,
+    disposed: false,
+  };
+  activePitchToolRegistration = registration;
+  const optionsRef = registration.optionsRef;
   const add = async (tool: RegisterToolArgs) => {
-    await document.modelContext?.registerTool(tool);
-    registered.push(tool.name);
+    await modelContext.registerTool(tool);
+    if (registration.disposed) {
+      await modelContext.unregisterTool?.(tool.name);
+      return;
+    }
+    registration.registered.add(tool.name);
   };
   const requireEvidenceReview = () => {
-    const pending = options.getSnapshot().evidenceReview.pendingMaterialIds;
+    const pending = optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
     if (pending.length) {
       throw new Error(
         `Review every uploaded pitch file before bringing in the judges. Pending material ids: ${pending.join(', ')}`,
@@ -186,8 +249,8 @@ export function registerPitchTools(options: {
   };
   const requireFounderTurnComplete = () => {
     if (
-      options.getSnapshot().founderTurn.status === 'presenting' ||
-      options.getSnapshot().founderTurn.status === 'awaiting'
+      optionsRef.current.getSnapshot().founderTurn.status === 'presenting' ||
+      optionsRef.current.getSnapshot().founderTurn.status === 'awaiting'
     ) {
       throw new Error(
         'The founder has not answered the current judge. Call wait_for_founder_response before posting another turn.',
@@ -195,14 +258,14 @@ export function registerPitchTools(options: {
     }
   };
   const requireOfferDecisionComplete = () => {
-    if (options.getSnapshot().offerDecision.status === 'choosing') {
+    if (optionsRef.current.getSnapshot().offerDecision.status === 'choosing') {
       throw new Error(
         'The founder is choosing between live offers. Call wait_for_founder_offer_decision before continuing the panel.',
       );
     }
   };
   const requireNoAcceptedDeal = () => {
-    if (options.getSnapshot().acceptedBid) {
+    if (optionsRef.current.getSnapshot().acceptedBid) {
       throw new Error(
         'The founder already accepted an offer. Close the pitch with post_panel_verdict using that exact deal.',
       );
@@ -211,7 +274,8 @@ export function registerPitchTools(options: {
   const tools: RegisterToolArgs[] = [
     {
       name: 'start_pitch',
-      description: `Start or replace the visible Pitch The AI session in room ${options.getSnapshot().roomCode}. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the eight-minute clock.`,
+      description:
+        'Start or replace the visible Pitch The AI session in the room already verified through get_pitch_context. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the twenty-minute clock.',
       inputSchema: {
         type: 'object',
         required: ['companyName', 'askAmount', 'equity'],
@@ -225,7 +289,7 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: async (args) => {
-        await options.startPitch({
+        await optionsRef.current.startPitch({
           founderName:
             typeof args.founderName === 'string'
               ? args.founderName
@@ -236,11 +300,11 @@ export function registerPitchTools(options: {
           transcript:
             typeof args.openingPitch === 'string'
               ? args.openingPitch
-              : options.getSnapshot().openingDraft,
+              : optionsRef.current.getSnapshot().openingDraft,
         });
         return {
           started: true,
-          roomCode: options.getSnapshot().roomCode,
+          roomCode: optionsRef.current.getSnapshot().roomCode,
           companyName: args.companyName,
           askAmount: args.askAmount,
           equity: args.equity,
@@ -306,7 +370,7 @@ export function registerPitchTools(options: {
           mood: args.mood as PanelMood,
           soundtrack: args.soundtrack as Soundtrack,
         };
-        options.updatePitchDetails(update);
+        optionsRef.current.updatePitchDetails(update);
         return { updated: true, details: update };
       },
     },
@@ -320,7 +384,7 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       annotations: { readOnlyHint: true },
-      execute: () => options.getSnapshot(),
+      execute: () => optionsRef.current.getSnapshot(),
     },
     {
       name: 'review_pitch_evidence',
@@ -348,7 +412,7 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: (args) => {
-        const pending = options.getSnapshot().evidenceReview.pendingMaterialIds;
+        const pending = optionsRef.current.getSnapshot().evidenceReview.pendingMaterialIds;
         const incoming = args.reviews as Array<{
           materialId: string;
           summary: string;
@@ -367,7 +431,7 @@ export function registerPitchTools(options: {
           ...review,
           reviewedAt: Date.now(),
         }));
-        options.reviewPitchEvidence(reviews);
+        optionsRef.current.reviewPitchEvidence(reviews);
         return { reviewed: true, reviews };
       },
     },
@@ -398,7 +462,7 @@ export function registerPitchTools(options: {
             'An out judge must include outReason so the founder can see exactly why the investor left.',
           );
         }
-        options.applyJudgeTurn(String(args.roundSummary), judge);
+        optionsRef.current.applyJudgeTurn(String(args.roundSummary), judge);
         return {
           posted: true,
           judge,
@@ -425,7 +489,7 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: (args) =>
-        options.waitForFounderResponse(
+        optionsRef.current.waitForFounderResponse(
           typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
         ),
     },
@@ -461,10 +525,10 @@ export function registerPitchTools(options: {
             'Questions require post_judge_turn followed by wait_for_founder_response.',
           );
         }
-        options.applyJudgeRound(String(args.roundSummary), judges);
+        optionsRef.current.applyJudgeRound(String(args.roundSummary), judges);
         return {
           posted: true,
-          round: options.getSnapshot().pitch.round + 1,
+          round: optionsRef.current.getSnapshot().pitch.round + 1,
           judges,
         };
       },
@@ -508,7 +572,7 @@ export function registerPitchTools(options: {
             'Each bidding judge may submit only one offer per round.',
           );
         }
-        options.applyBidRound(bids);
+        optionsRef.current.applyBidRound(bids);
         return {
           posted: true,
           bids,
@@ -533,7 +597,7 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       execute: (args) =>
-        options.waitForFounderOfferDecision(
+        optionsRef.current.waitForFounderOfferDecision(
           typeof args.timeoutSeconds === 'number' ? args.timeoutSeconds : 12,
         ),
     },
@@ -556,7 +620,7 @@ export function registerPitchTools(options: {
         requireEvidenceReview();
         requireFounderTurnComplete();
         requireOfferDecisionComplete();
-        const snapshot = options.getSnapshot();
+        const snapshot = optionsRef.current.getSnapshot();
         const acceptedBid = snapshot.acceptedBid;
         const amountRaised = Number(args.amountRaised);
         const winningJudgeId = args.winningJudgeId as JudgeId | undefined;
@@ -574,7 +638,7 @@ export function registerPitchTools(options: {
             'No offer was accepted by the founder. amountRaised must be 0.',
           );
         }
-        const result = await options.finalizePitch({
+        const result = await optionsRef.current.finalizePitch({
           score: Number(args.score),
           summary: String(args.summary),
           amountRaised,
@@ -593,16 +657,19 @@ export function registerPitchTools(options: {
         additionalProperties: false,
       },
       annotations: { readOnlyHint: true },
-      execute: async () => ({ entries: await options.fetchLeaderboard() }),
+      execute: async () => ({
+        entries: await optionsRef.current.fetchLeaderboard(),
+      }),
     },
   ];
 
   void Promise.all(tools.map(add))
-    .then(() => options.onStatus('ready'))
-    .catch(() => options.onStatus('browser-only'));
+    .then(() => {
+      if (!registration.disposed) optionsRef.current.onStatus('ready');
+    })
+    .catch(() => {
+      if (!registration.disposed) optionsRef.current.onStatus('browser-only');
+    });
 
-  return () => {
-    for (const name of registered)
-      void document.modelContext?.unregisterTool?.(name);
-  };
+  return () => releasePitchToolRegistration(registration);
 }
