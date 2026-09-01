@@ -5,6 +5,8 @@ import {
   ArrowUpRight,
   AudioLines,
   Building2,
+  Camera,
+  CameraOff,
   ChevronDown,
   Clock3,
   CircleStop,
@@ -32,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import NextImage from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -559,6 +562,10 @@ export function PitchArena() {
   >(null);
   const [issueDraft, setIssueDraft] = useState('');
   const [recordingSession, setRecordingSession] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState<
+    'off' | 'requesting' | 'live' | 'error'
+  >('off');
+  const [cameraMessage, setCameraMessage] = useState('');
   const [agentHost, setAgentHost] = useState<'codex' | 'bringmyai'>(() =>
     typeof window !== 'undefined' && hasBringMyAiAgentBridge()
       ? 'bringmyai'
@@ -613,6 +620,11 @@ export function PitchArena() {
   const responseInputRef = useRef<HTMLTextAreaElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const displayRecordingStreamRef = useRef<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const recordingDrawTimerRef = useRef<number | null>(null);
+  const recordingAudioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
@@ -709,6 +721,14 @@ export function PitchArena() {
       window.speechSynthesis?.cancel();
     };
   }, []);
+
+  useEffect(() => {
+    const video = cameraVideoRef.current;
+    const stream = cameraStreamRef.current;
+    if (cameraStatus !== 'live' || !video || !stream) return;
+    video.srcObject = stream;
+    void video.play().catch(() => undefined);
+  }, [cameraStatus]);
 
   const enableMusic = useCallback(async () => {
     const AudioContextClass = window.AudioContext;
@@ -1999,33 +2019,42 @@ export function PitchArena() {
     submitFounderResponse(cleaned);
   }, [draft, submitFounderResponse]);
 
-  const uploadMaterials = useCallback(async (files: FileList | null) => {
-    if (!files?.length || !sessionIdRef.current) return;
-    setUploading(true);
-    setUploadError('');
-    try {
-      for (const file of Array.from(files).slice(0, 6)) {
-        const form = new FormData();
-        form.set('sessionId', sessionIdRef.current);
-        form.set('file', file);
-        const response = await fetch('/api/materials', {
-          method: 'POST',
-          body: form,
-        });
-        const result = (await response.json()) as {
-          material?: PitchMaterial;
-          error?: string;
-        };
-        if (!response.ok || !result.material)
-          throw new Error(result.error ?? `Could not upload ${file.name}`);
-        setMaterials((current) => [...current, result.material!].slice(0, 12));
+  const uploadMaterials = useCallback(
+    async (files: FileList | File[] | null) => {
+      if (!files?.length || !sessionIdRef.current) return false;
+      setUploading(true);
+      setUploadError('');
+      try {
+        for (const file of Array.from(files).slice(0, 6)) {
+          const form = new FormData();
+          form.set('sessionId', sessionIdRef.current);
+          form.set('file', file);
+          const response = await fetch('/api/materials', {
+            method: 'POST',
+            body: form,
+          });
+          const result = (await response.json()) as {
+            material?: PitchMaterial;
+            error?: string;
+          };
+          if (!response.ok || !result.material)
+            throw new Error(result.error ?? `Could not upload ${file.name}`);
+          setMaterials((current) =>
+            [...current, result.material!].slice(0, 12),
+          );
+        }
+        return true;
+      } catch (error) {
+        setUploadError(
+          error instanceof Error ? error.message : 'Upload failed',
+        );
+        return false;
+      } finally {
+        setUploading(false);
       }
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const sessionTranscript = useCallback(() => {
     const lines = feed.map(
@@ -2098,11 +2127,142 @@ export function PitchArena() {
     toolEvents,
   ]);
 
+  const startFounderCamera = useCallback(async (includeAudio = false) => {
+    const currentStream = cameraStreamRef.current;
+    if (currentStream?.active) {
+      if (includeAudio && !currentStream.getAudioTracks().length) {
+        try {
+          const microphone = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+          microphone
+            .getAudioTracks()
+            .forEach((track) => currentStream.addTrack(track));
+        } catch {
+          setCameraMessage(
+            'Founder camera is live. Microphone access was unavailable, so recording will use available audio only.',
+          );
+        }
+      }
+      setCameraStatus('live');
+      return currentStream;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraStatus('error');
+      setCameraMessage('This browser does not support a founder camera.');
+      return null;
+    }
+    setCameraStatus('requesting');
+    setCameraMessage(
+      includeAudio
+        ? 'Waiting for camera and microphone permission…'
+        : 'Waiting for camera permission…',
+    );
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: includeAudio
+          ? {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          : false,
+      });
+      cameraStreamRef.current = stream;
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        cameraStreamRef.current = null;
+        setCameraStatus('off');
+        setCameraMessage('Founder camera stopped.');
+      });
+      setCameraStatus('live');
+      setCameraMessage('Founder camera is live only on this device.');
+      return stream;
+    } catch {
+      setCameraStatus('error');
+      setCameraMessage('Camera permission was declined or unavailable.');
+      return null;
+    }
+  }, []);
+
+  const stopFounderCamera = useCallback(() => {
+    if (recordingSession) return;
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+    setCameraStatus('off');
+    setCameraMessage('Founder camera is off.');
+  }, [recordingSession]);
+
+  const captureFounderPhoto = useCallback(async () => {
+    const video = cameraVideoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setCameraMessage('Camera is still warming up. Try the capture again.');
+      return;
+    }
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.9),
+    );
+    if (!blob) {
+      setCameraMessage('The readiness photo could not be captured.');
+      return;
+    }
+    const file = new File([blob], `founder-readiness-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+    });
+    const uploaded = await uploadMaterials([file]);
+    if (!uploaded) {
+      setCameraMessage(
+        'Photo captured, but it could not be added for the judges. Try again.',
+      );
+      return;
+    }
+    if (!recordingSession) {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+      setCameraStatus('off');
+    }
+    setCameraMessage(
+      'Readiness photo added as evidence. Judges can review presentation setup.',
+    );
+  }, [recordingSession, uploadMaterials]);
+
   const stopSessionRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
+    if (recordingDrawTimerRef.current !== null) {
+      window.clearInterval(recordingDrawTimerRef.current);
+      recordingDrawTimerRef.current = null;
+    }
+    displayRecordingStreamRef.current
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    displayRecordingStreamRef.current = null;
     recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
     recordingStreamRef.current = null;
+    if (recordingAudioContextRef.current) {
+      void recordingAudioContextRef.current.close();
+      recordingAudioContextRef.current = null;
+    }
     setRecordingSession(false);
   }, []);
 
@@ -2112,10 +2272,87 @@ export function PitchArena() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const founderStream = await startFounderCamera(true);
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 30 },
         audio: true,
       });
+      displayRecordingStreamRef.current = displayStream;
+      const screenVideo = document.createElement('video');
+      screenVideo.srcObject = displayStream;
+      screenVideo.muted = true;
+      screenVideo.playsInline = true;
+      await screenVideo.play();
+
+      const founderVideo = document.createElement('video');
+      if (founderStream) {
+        founderVideo.srcObject = founderStream;
+        founderVideo.muted = true;
+        founderVideo.playsInline = true;
+        await founderVideo.play();
+      }
+
+      const settings = displayStream.getVideoTracks()[0]?.getSettings();
+      const sourceWidth = Math.max(
+        1,
+        settings?.width || screenVideo.videoWidth || 1920,
+      );
+      const sourceHeight = Math.max(
+        1,
+        settings?.height || screenVideo.videoHeight || 1080,
+      );
+      const scale = Math.min(1, 1920 / sourceWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1280, Math.round(sourceWidth * scale));
+      canvas.height = Math.round(canvas.width * (sourceHeight / sourceWidth));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Recording canvas unavailable');
+
+      const drawFrame = () => {
+        context.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+        if (founderStream && founderVideo.videoWidth) {
+          const pipWidth = Math.round(canvas.width * 0.24);
+          const pipHeight = Math.round(
+            pipWidth * (founderVideo.videoHeight / founderVideo.videoWidth),
+          );
+          const margin = Math.round(canvas.width * 0.018);
+          const x = margin;
+          const y = canvas.height - pipHeight - margin;
+          context.save();
+          context.fillStyle = 'rgba(0,0,0,.82)';
+          context.fillRect(x - 7, y - 28, pipWidth + 14, pipHeight + 35);
+          context.strokeStyle = '#ffc857';
+          context.lineWidth = Math.max(3, Math.round(canvas.width / 640));
+          context.strokeRect(x - 3, y - 3, pipWidth + 6, pipHeight + 6);
+          context.translate(x + pipWidth, y);
+          context.scale(-1, 1);
+          context.drawImage(founderVideo, 0, 0, pipWidth, pipHeight);
+          context.restore();
+          context.fillStyle = '#ffc857';
+          context.font = `700 ${Math.max(13, Math.round(canvas.width / 105))}px sans-serif`;
+          context.fillText('FOUNDER CAM', x, y - 9);
+        }
+      };
+      drawFrame();
+      recordingDrawTimerRef.current = window.setInterval(drawFrame, 1000 / 30);
+
+      const canvasStream = canvas.captureStream(30);
+      const outputTracks = [...canvasStream.getVideoTracks()];
+      const streamsWithAudio = [displayStream, founderStream].filter(
+        (stream): stream is MediaStream =>
+          Boolean(stream?.getAudioTracks().length),
+      );
+      if (streamsWithAudio.length) {
+        const mixContext = new AudioContext();
+        await mixContext.resume();
+        const destination = mixContext.createMediaStreamDestination();
+        streamsWithAudio.forEach((stream) => {
+          mixContext.createMediaStreamSource(stream).connect(destination);
+        });
+        recordingAudioContextRef.current = mixContext;
+        outputTracks.push(...destination.stream.getAudioTracks());
+      }
+      const stream = new MediaStream(outputTracks);
       const preferredMime = [
         'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp8,opus',
@@ -2151,18 +2388,38 @@ export function PitchArena() {
           if (recorder.state !== 'inactive') recorder.stop();
         });
       });
+      displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        stopSessionRecording();
+      });
       recordingStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
       recorder.start(1_000);
       setRecordingSession(true);
+      setCameraMessage(
+        founderStream
+          ? 'Recording the arena with founder camera and microphone.'
+          : 'Recording the arena without camera because camera access is unavailable.',
+      );
     } catch {
+      displayRecordingStreamRef.current
+        ?.getTracks()
+        .forEach((track) => track.stop());
+      displayRecordingStreamRef.current = null;
       setHandoffMessage('Recording was cancelled or could not start.');
     }
-  }, []);
+  }, [startFounderCamera, stopSessionRecording]);
 
   useEffect(
     () => () => {
       recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      displayRecordingStreamRef.current
+        ?.getTracks()
+        .forEach((track) => track.stop());
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (recordingDrawTimerRef.current !== null)
+        window.clearInterval(recordingDrawTimerRef.current);
+      if (recordingAudioContextRef.current)
+        void recordingAudioContextRef.current.close();
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state !== 'inactive'
@@ -2271,6 +2528,13 @@ export function PitchArena() {
   const pendingEvidenceCount = useMemo(
     () => materials.filter((material) => !evidenceReviews[material.id]).length,
     [evidenceReviews, materials],
+  );
+  const founderPhoto = useMemo(
+    () =>
+      [...materials]
+        .reverse()
+        .find((material) => material.name.startsWith('founder-readiness-')),
+    [materials],
   );
   const waitingJudge = founderTurn.judgeId
     ? JUDGES.find((judge) => judge.id === founderTurn.judgeId)
@@ -2750,13 +3014,26 @@ export function PitchArena() {
               <DropdownMenuItem
                 className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
                 onClick={() =>
+                  cameraStatus === 'live'
+                    ? stopFounderCamera()
+                    : void startFounderCamera()
+                }
+              >
+                {cameraStatus === 'live' ? <CameraOff /> : <Camera />}{' '}
+                {cameraStatus === 'live'
+                  ? 'Close founder camera'
+                  : 'Open founder camera'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
+                onClick={() =>
                   recordingSession
                     ? stopSessionRecording()
                     : void startSessionRecording()
                 }
               >
                 {recordingSession ? <CircleStop /> : <Video />}{' '}
-                {recordingSession ? 'Stop recording' : 'Record this session'}
+                {recordingSession ? 'Stop recording' : 'Record screen + camera'}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem
@@ -2769,6 +3046,37 @@ export function PitchArena() {
           </DropdownMenu>
         </div>
       </header>
+      {cameraStatus === 'live' && (
+        <aside className="founder-video-dock" aria-label="Live founder video">
+          <header>
+            <div>
+              <span>Founder cam</span>
+              <strong>{pitch.founderName.trim() || 'Guest founder'}</strong>
+            </div>
+            {recordingSession && <b>REC</b>}
+          </header>
+          <video
+            ref={cameraVideoRef}
+            autoPlay
+            muted
+            playsInline
+            aria-label="Live founder camera preview"
+          />
+          <footer>
+            <button type="button" onClick={() => void captureFounderPhoto()}>
+              <Camera /> Capture judge photo
+            </button>
+            <button
+              type="button"
+              onClick={stopFounderCamera}
+              disabled={recordingSession}
+              aria-label="Turn off founder camera"
+            >
+              <CameraOff />
+            </button>
+          </footer>
+        </aside>
+      )}
       {launchCount !== null && (
         <output className="arena-launch-countdown" aria-live="assertive">
           <span key={launchCount}>{launchCount}</span>
@@ -3482,6 +3790,64 @@ export function PitchArena() {
                   }
                 />
               </label>
+              <section
+                className="founder-camera-slot"
+                aria-label="Founder camera"
+              >
+                <header>
+                  <span>Founder</span>
+                  <strong>{pitch.founderName.trim() || 'Guest founder'}</strong>
+                  {recordingSession && <b>REC</b>}
+                </header>
+                <div className="founder-camera-frame">
+                  {founderPhoto ? (
+                    <NextImage
+                      src={founderPhoto.url}
+                      alt={`${pitch.founderName.trim() || 'Founder'} readiness capture`}
+                      fill
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="founder-camera-empty">
+                      {cameraStatus === 'requesting' ? (
+                        <LoaderCircle />
+                      ) : (
+                        <UserRound />
+                      )}
+                      <span>
+                        {cameraStatus === 'requesting'
+                          ? 'Opening…'
+                          : cameraStatus === 'live'
+                            ? 'Capture from the live camera'
+                            : 'Add your photo'}
+                      </span>
+                    </div>
+                  )}
+                  {founderPhoto && <i>MCP evidence</i>}
+                </div>
+                <div className="founder-camera-actions">
+                  {cameraStatus === 'live' ? (
+                    <button
+                      type="button"
+                      onClick={() => void captureFounderPhoto()}
+                    >
+                      <Camera /> Take your photo
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void startFounderCamera()}
+                      disabled={cameraStatus === 'requesting'}
+                    >
+                      <Camera />
+                      {founderPhoto ? 'Retake photo' : 'Take your photo'}
+                    </button>
+                  )}
+                </div>
+                <small>
+                  {cameraMessage || 'Visible to judges only after capture.'}
+                </small>
+              </section>
             </div>
           </div>
 
