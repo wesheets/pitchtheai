@@ -22,6 +22,13 @@
       "when": 1788204488199,
       "tag": "0002_milky_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788273900000,
+      "tag": "0003_clear_demo_leaderboard",
+      "breakpoints": true
     }
   ]
 }
