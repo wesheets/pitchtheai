@@ -3232,15 +3232,16 @@ export function PitchArena() {
       </dialog>
     ) : null;
 
+  const arenaModalOpen = Boolean(
+    composerOpen ||
+      pitch.status === 'final' ||
+      utilityPanel ||
+      judgeLifeline.status === 'selecting',
+  );
+
   return (
     <main className="room-arena text-[#f6f2e9]">
       <div className="room-vignette" aria-hidden="true" />
-      {(composerOpen ||
-        pitch.status === 'final' ||
-        utilityPanel ||
-        judgeLifeline.status === 'selecting') && (
-        <div className="arena-modal-backdrop" aria-hidden="true" />
-      )}
       <header className="room-header">
         <div className="room-brand">
           <div className="brand-mark">
@@ -3432,8 +3433,11 @@ export function PitchArena() {
         </output>
       )}
       <section
-        className={`room-stage room-${pitch.status} ${pendingEvidenceCount > 0 && pitch.status === 'live' ? 'room-evidence-pending' : ''}`}
+        className={`room-stage room-${pitch.status} ${arenaModalOpen ? 'room-stage-modal-open' : ''} ${pendingEvidenceCount > 0 && pitch.status === 'live' ? 'room-evidence-pending' : ''}`}
       >
+        {arenaModalOpen && (
+          <div className="arena-modal-backdrop" aria-hidden="true" />
+        )}
         {focusedJudgeOverlay}
         {founderComposerOverlay}
         {utilityOverlay}

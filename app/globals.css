@@ -1080,6 +1080,9 @@ textarea {
   min-height: 100svh;
   padding-top: 1px;
 }
+.room-stage-modal-open {
+  z-index: 21;
+}
 .judge-monitor-grid {
   position: relative;
   z-index: 3;
