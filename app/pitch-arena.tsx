@@ -1291,10 +1291,6 @@ export function PitchArena() {
   const founderFeed = feed.filter((entry) => entry.kind !== 'judge').slice(-6);
   const pitchQueued =
     pitch.status === 'lobby' && handoffStatus === 'waiting' && Boolean(draft.trim());
-  const queuedPitchParagraphs = draft
-    .trim()
-    .split(/\n\s*\n/)
-    .filter(Boolean);
 
   return (
     <main className="room-arena text-[#f6f2e9]">
@@ -1517,11 +1513,7 @@ export function PitchArena() {
                 Edit &amp; recopy
               </button>
             </div>
-            <div className="queued-pitch-copy">
-              {queuedPitchParagraphs.map((paragraph, index) => (
-                <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
-              ))}
-            </div>
+            <div className="queued-pitch-copy">{draft.trim()}</div>
             <footer>
               <span className="queued-pulse" aria-hidden="true" />
               {handoffMessage}

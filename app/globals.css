@@ -1866,10 +1866,12 @@ textarea {
 .queued-pitch-card {
   position: absolute;
   z-index: 11;
-  top: clamp(245px, 27svh, 310px);
+  top: clamp(255px, 25svh, 305px);
   left: 50%;
-  width: min(1080px, calc(100% - 72px));
-  max-height: calc(100svh - clamp(275px, 31svh, 345px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1280px, calc(100% - 96px));
+  height: min(650px, calc(100svh - clamp(275px, 28svh, 335px)));
   overflow: hidden;
   border: 1px solid rgb(255 194 72 / 0.72);
   border-radius: 20px;
@@ -1901,6 +1903,8 @@ textarea {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 1rem;
+  width: min(100%, 1120px);
+  margin-inline: auto;
   border-bottom: 1px solid rgb(255 255 255 / 0.08);
   padding-bottom: 0.75rem;
 }
@@ -1939,23 +1943,28 @@ textarea {
   border-color: rgb(255 200 93 / 0.5);
 }
 .queued-pitch-copy {
-  columns: 2;
-  column-gap: clamp(1.4rem, 3vw, 3rem);
-  column-rule: 1px solid rgb(255 255 255 / 0.07);
-  margin-top: 0.85rem;
-  font-size: clamp(10px, 0.7vw, 12px);
-  line-height: 1.42;
-}
-.queued-pitch-copy p {
-  break-inside: avoid;
-  margin: 0 0 0.65rem;
+  width: min(100%, 1080px);
+  min-height: 0;
+  margin: 1rem auto 0;
+  overflow-y: auto;
+  padding: 0.15rem clamp(0.25rem, 1vw, 0.8rem) 0.75rem;
+  color: rgb(255 255 255 / 0.9);
+  font-size: clamp(14px, 0.9vw, 17px);
+  line-height: 1.55;
+  text-align: left;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  scrollbar-color: rgb(255 193 70 / 0.62) rgb(255 255 255 / 0.045);
+  scrollbar-width: thin;
 }
 .queued-pitch-card footer {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  width: min(100%, 1120px);
+  margin-inline: auto;
   border-top: 1px solid rgb(255 255 255 / 0.08);
-  margin-top: 0.25rem;
+  margin-top: 0.5rem;
   padding-top: 0.7rem;
   color: rgb(255 255 255 / 0.42);
   font: 700 9px var(--font-geist-mono);
@@ -2810,14 +2819,17 @@ textarea {
     position: relative;
     top: auto;
     left: auto;
+    display: block;
     width: calc(100% - 24px);
+    height: auto;
     max-height: none;
     margin: -1rem auto 1rem;
     transform: none;
     animation: none;
   }
   .queued-pitch-copy {
-    columns: 1;
+    max-height: 55svh;
+    font-size: 14px;
   }
   .queued-pitch-card-topline {
     grid-template-columns: 1fr auto;
