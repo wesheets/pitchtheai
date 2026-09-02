@@ -8,7 +8,7 @@ Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchth
 
 1. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
 2. Write or dictate the opening pitch, optionally attach evidence, and take an opt-in founder photo.
-3. Copy the generated panel prompt into a WebMCP-capable browser agent. The arena verifies the room code, runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session.
+3. Copy the generated fast-start prompt into a WebMCP-capable browser agent. The prompt explicitly authorizes the submitted room data and evidence, and the first `start_pitch` call verifies the room code before changing state. The arena then runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session without a redundant preflight or confirmation turn.
 4. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
 5. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
 6. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.

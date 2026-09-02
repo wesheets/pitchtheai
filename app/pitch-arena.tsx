@@ -1427,7 +1427,7 @@ export function PitchArena() {
     setHandoffMessage('Handing the room to your agent…');
     try {
       await enableMusic();
-      await requestPitchAgent({
+      const handoff = await requestPitchAgent({
         roomCode,
         roomUrl: window.location.href,
         founderName,
@@ -1439,7 +1439,9 @@ export function PitchArena() {
       });
       if (pitchRef.current.status === 'live') return;
       const waitingMessage =
-        'Panel prompt copied. Paste and send it to your browser agent; the clock starts when it joins.';
+        handoff.host === 'bringmyai'
+          ? 'Sent to your selected AI. It is joining this room now.'
+          : 'Fast-start prompt copied. Paste and send it once—your agent is authorized to enter immediately without a second confirmation.';
       writeQueuedPitchSession({
         version: 1,
         roomCode,

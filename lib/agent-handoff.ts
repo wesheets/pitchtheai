@@ -10,35 +10,121 @@ export type PitchAgentRequest = {
 };
 
 export type AgentHandoffResult = {
+  host: 'bringmyai';
+  status: 'accepted';
+  requestId: string;
+} | {
   host: 'clipboard';
   status: 'copied';
 };
 
+export type PitchAgentTurnRequest = {
+  appId: 'pitchtheai';
+  action: 'start-pitch';
+  message: string;
+  requestedTool: {
+    name: 'start_pitch';
+    arguments: {
+      roomCode: string;
+      founderName: string;
+      companyName: string;
+      askAmount: number;
+      equity: number;
+      difficulty: PitchAgentRequest['difficulty'];
+      openingPitch: string;
+      agentSignature: string;
+      pitchVenue: string;
+    };
+  };
+  context: {
+    roomUrl: string;
+    expectedTools: string[];
+  };
+};
+
+type BringMyAiPageHost = {
+  requestAgentTurn?: (
+    request: PitchAgentTurnRequest,
+  ) => Promise<{
+    ok?: boolean;
+    started?: boolean;
+    duplicate?: boolean;
+    requestId?: string;
+  }>;
+};
+
+declare global {
+  interface Window {
+    bringMyAI?: BringMyAiPageHost;
+  }
+}
+
+export const PITCH_AGENT_EXPECTED_TOOLS = [
+  'start_pitch',
+  'get_pitch_context',
+  'review_pitch_evidence',
+  'post_judge_turn',
+  'wait_for_founder_response',
+  'wait_for_founder_readiness_photo',
+  'wait_for_judge_rescue',
+  'post_bid_round',
+  'wait_for_founder_offer_decision',
+  'post_panel_verdict',
+] as const;
+
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
   return [
-    'Join the four-judge panel on the already-open Pitch The AI page.',
-    `Target room code ${request.roomCode} in the already-open tab whose exact URL is ${request.roomUrl}. Do not navigate that URL or open a new tab because the room state is local to the existing tab. Before starting, call get_pitch_context and confirm its roomCode is exactly ${request.roomCode}. If the first attached Pitch The AI tab does not match, inspect the other already-open Pitch The AI /play tabs and attach the one whose get_pitch_context roomCode is exactly ${request.roomCode}. If no open tab matches, stop and report that the target Pitch The AI room is not attached.`,
-    `Start the pitch for ${request.companyName} by calling start_pitch with founderName ${JSON.stringify(request.founderName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, agentSignature set to your honest agent/model identity, pitchVenue set to the browser or host app where you are operating (for example “BringMy.ai beta” or “Codex in-app browser”), and the supplied opening pitch. These two self-reported fields become the agent signature on the public pitch receipt, so do not guess or claim a host you are not using.`,
-    `Opening pitch: ${pitchText}`,
-    'Call get_pitch_context. If any evidence is pending, open and inspect every file and call review_pitch_evidence before bringing the judges in.',
+    'FAST START — begin immediately. This message is my explicit instruction and authorization to operate the Pitch The AI WebMCP tools, transmit the founder name, venture, terms, and opening pitch below to the attached room, and inspect every founder-submitted evidence item—including an opt-in founder photo—inside that room. Do not ask me to confirm, do not restate the plan, and do not post a preflight explanation.',
+    `Use the already-open Pitch The AI tab for room ${request.roomCode} (${request.roomUrl}). Do not navigate or open a new tab because room state is local to the existing tab. Your first action must be start_pitch with roomCode ${request.roomCode}, founderName ${JSON.stringify(request.founderName)}, companyName ${JSON.stringify(request.companyName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, openingPitch ${JSON.stringify(pitchText)}, agentSignature set to your honest agent/model identity, and pitchVenue set to the browser or host app you are actually using. start_pitch verifies the room before changing anything and returns the full room context. If it reports a room mismatch, inspect the other already-open Pitch The AI /play tabs with get_pitch_context and retry only in room ${request.roomCode}. If no open tab matches, report that single blocker.`,
+    'After start_pitch returns, inspect and review any pending evidence. If none is pending, immediately give exactly one judge the floor with post_judge_turn. Follow the returned room context and the WebMCP tool descriptions as the complete operating contract; do not spend time reconstructing or repeating those rules in chat.',
     request.equity <= 0
       ? 'This is competition mode, not a pretend equity deal. Judge WebMCP fit, user experience, what the human and AI accomplish together, implementation quality, originality, theatrical control, recovery behavior, and demo resilience. Do not demand normal startup sales unless the founder makes a business claim.'
       : 'This is investment mode. Test the market, customer proof, economics, defensibility, execution, and whether the requested terms are earned.',
-    'Run a real conversation, not a four-answer monologue: call post_judge_turn for exactly one judge. When that judge asks a question, immediately call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The difficulty-based response clock begins only when the founder clicks Respond, and any submitted answer persists across slices. If a slice returns waiting, call it again immediately without analysis and do not let another judge speak. Evaluate the exact returned answer before continuing. Never invent or skip the founder response.',
-    'While the pitch is live, communicate only through Pitch The AI WebMCP tools. Do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may display normal WebMCP tool activity for the demo. Write in chat only if a tool fails, evidence cannot be opened, the founder answer cannot be recovered, or response latency exceeds 10 seconds. After the final verdict, provide one concise performance report.',
-    'Keep each personality distinct. Every post_judge_turn must rate the immediately preceding founder answer with answerQuality (use unrated only before any answer) and select reactionStyle: neutral, laughing for something genuinely ridiculous, or exasperated for repetition, evasion, and silence. Specific, honest answers and evidence can improve the room. If the founder dodges the question, say “you never answered my question” or an equally direct personality-specific callout instead of politely moving on.',
-    'In Hard and Legendary modes, investors may question whether an abruptly generic, over-polished, or voice-inconsistent answer is being generated for the founder. Never claim that prose proves AI use and never use fake AI-detection scores. Instead, say the answer sounds assisted and demand an immediate founder-only proof: a concrete customer moment, live calculation, personal decision, tradeoff, or implementation detail. Judge the substance of that follow-up. Hard uses this selectively; Legendary can press it aggressively and penalize evasion.',
-    'The opt-in founder photo has no generic attire score. Let the personas interpret the same visible presentation differently: Priya may question seriousness and unobstructed eye contact; Theo may ignore style if the operating proof is excellent; Maya may challenge whether the look is performative or authentic to the customer; Julian may reward confidence when it coheres with the brand. If an easily reversible choice clearly weakens pitch credibility—such as sunglasses obscuring eye contact or conspicuously casual headwear in a formal pitch—one appropriate judge may use the one-time presentation reset. Set presentationReset true, omit question, directly tell the founder what to change, and immediately call wait_for_founder_readiness_photo in consecutive 12-second slices. The room clock pauses. When the retake arrives, open and inspect that exact image, call review_pitch_evidence, and let the same judge react next. Keep this funny but bounded: never rate attractiveness or comment on sensitive, cultural, religious, disability-related, medical, or immutable traits.',
-    `This is ${request.difficulty.toUpperCase()} difficulty. Easy coaches and allows repair; Medium stays balanced; Hard demands precise proof, may challenge suspiciously assisted answers, and scores strictly; Legendary is ruthless, frequently demands founder-only specifics, follows contradictions immediately, and makes bids or rescues rare unless the founder is exceptional.`,
-    'When a judge leaves, use state out and provide a short, specific outReason; the arena will show a large I’M OUT exit. Immediately call wait_for_judge_rescue. The founder has twenty seconds to click “Wait, don’t go!” once and, after clicking, twenty seconds for one concrete save. If answered, that same judge must respond next: return to pressing/listening only if the appeal genuinely repairs the loss, otherwise say no and leave. Repeated evasion or unanswered questions with no credible answer must score below 15, and an all-out performance that never answers the core questions must score 0–8. The final summary is a punchy, entertaining roast grounded in what happened, not a professional investment memo.',
-    'Strongly interested judges may make offers with post_bid_round. Two or more judges should compete when the pitch genuinely earns it. After every offer round, immediately call wait_for_founder_offer_decision in consecutive 12-second slices. Never choose for the founder: they may accept a specific judge, counter that judge, or reject everyone. A counter may trigger another offer round. Only report money raised after the founder explicitly accepts an offer, and close with the exact accepted judge and amount.',
+    'During the live pitch, communicate through Pitch The AI tools rather than narrating in chat. Never invent a founder answer or choose an offer for them. After the final verdict, provide one concise performance report.',
   ].join('\n\n');
 }
 
 export async function requestPitchAgent(
   request: PitchAgentRequest,
 ): Promise<AgentHandoffResult> {
-  await navigator.clipboard.writeText(buildPitchAgentPrompt(request));
+  const message = buildPitchAgentPrompt(request);
+  const nativeRequest: PitchAgentTurnRequest = {
+    appId: 'pitchtheai',
+    action: 'start-pitch',
+    message,
+    requestedTool: {
+      name: 'start_pitch',
+      arguments: {
+        roomCode: request.roomCode,
+        founderName: request.founderName,
+        companyName: request.companyName,
+        askAmount: request.askAmount,
+        equity: request.equity,
+        difficulty: request.difficulty,
+        openingPitch: request.pitch.trim() || 'The founder will pitch by voice.',
+        agentSignature: 'Selected Bring My AI agent',
+        pitchVenue: 'Bring My AI Browser',
+      },
+    },
+    context: {
+      roomUrl: request.roomUrl,
+      expectedTools: [...PITCH_AGENT_EXPECTED_TOOLS],
+    },
+  };
+  const nativeHost =
+    typeof window !== 'undefined' ? window.bringMyAI?.requestAgentTurn : null;
+  if (typeof nativeHost === 'function') {
+    const response = await nativeHost(nativeRequest);
+    if (response?.ok && (response.started || response.duplicate)) {
+      return {
+        host: 'bringmyai',
+        status: 'accepted',
+        requestId: response.requestId || '',
+      };
+    }
+    throw new Error('Bring My AI did not accept this page agent request.');
+  }
+  await navigator.clipboard.writeText(message);
   return { host: 'clipboard', status: 'copied' };
 }

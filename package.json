@@ -12,7 +12,8 @@
     "lint": "oxlint app lib db",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test:handoff": "node --experimental-strip-types --test tests/pitch-agent-handoff.test.ts"
   },
   "dependencies": {
     "react": "19.2.6",
