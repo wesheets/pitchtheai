@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  ArrowLeft,
   ArrowUpRight,
   AudioLines,
   Building2,
@@ -715,7 +716,12 @@ export function PitchArena() {
   const [panelAgentsLoading, setPanelAgentsLoading] = useState(false);
   const [panelAgentsError, setPanelAgentsError] = useState('');
   const [panelAssignments, setPanelAssignments] =
-    useState<PitchPanelAssignments>({ maya: '', julian: '', priya: '', theo: '' });
+    useState<PitchPanelAssignments>({
+      maya: '',
+      julian: '',
+      priya: '',
+      theo: '',
+    });
   const [activePanelId, setActivePanelId] = useState('');
   const [handoffStatus, setHandoffStatus] = useState<
     'idle' | 'requesting' | 'warming' | 'waiting' | 'connected' | 'error'
@@ -1511,7 +1517,9 @@ export function PitchArena() {
         }
         const selected = Object.values(panelAssignments);
         if (selected.some((key) => !key) || new Set(selected).size !== 4) {
-          throw new Error('Assign four different configured agents to the panel.');
+          throw new Error(
+            'Assign four different configured agents to the panel.',
+          );
         }
       }
       const handoff =
@@ -1519,18 +1527,17 @@ export function PitchArena() {
           ? await requestPitchAgentPanel(agentRequest, panelAssignments)
           : await requestPitchAgent(agentRequest);
       const activePanelId =
-        handoff.host === 'bringmyai' ? handoff.panelId ?? '' : '';
+        handoff.host === 'bringmyai' ? (handoff.panelId ?? '') : '';
       panelIdRef.current = activePanelId;
       setActivePanelId(activePanelId);
       panelExpectedJudgeRef.current = activePanelId ? 'maya' : null;
       panelCompletedJudgesRef.current = new Set();
       panelPitchRequestRef.current = activePanelId ? agentRequest : null;
       if (pitchRef.current.status === 'live') return;
-      const waitingMessage =
-        activePanelId
-          ? 'Four seats authorized. Maya’s assigned agent is entering first; the room will hand off each judge turn.'
-          : handoff.host === 'bringmyai'
-            ? 'Sent to your selected AI. It is joining this room now.'
+      const waitingMessage = activePanelId
+        ? 'Four seats authorized. Maya’s assigned agent is entering first; the room will hand off each judge turn.'
+        : handoff.host === 'bringmyai'
+          ? 'Sent to your selected AI. It is joining this room now.'
           : 'Fast-start prompt copied. Paste and send it once—your agent is authorized to enter immediately without a second confirmation.';
       writeQueuedPitchSession({
         version: 1,
@@ -2689,8 +2696,7 @@ export function PitchArena() {
           status: 'panel_complete',
           completedJudges: [...panelCompletedJudgesRef.current],
           handoffSummary,
-          next:
-            'All four assigned judge seats are complete. You are the closing agent: make any earned offer, wait for the founder decision if needed, then call post_panel_verdict.',
+          next: 'All four assigned judge seats are complete. You are the closing agent: make any earned offer, wait for the founder decision if needed, then call post_panel_verdict.',
         };
       }
       panelExpectedJudgeRef.current = nextJudge.id;
@@ -3022,7 +3028,14 @@ export function PitchArena() {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    const background = context.createRadialGradient(600, 280, 20, 600, 280, 720);
+    const background = context.createRadialGradient(
+      600,
+      280,
+      20,
+      600,
+      280,
+      720,
+    );
     background.addColorStop(0, '#241a09');
     background.addColorStop(0.48, '#0d0c0a');
     background.addColorStop(1, '#020202');
@@ -3046,7 +3059,11 @@ export function PitchArena() {
     context.fillText('/100', 214, 292);
     context.fillStyle = '#ffffff';
     context.font = '800 40px Arial, sans-serif';
-    context.fillText(snapshot.amountRaised ? 'YOU GOT A DEAL.' : 'NO DEAL.', 76, 356);
+    context.fillText(
+      snapshot.amountRaised ? 'YOU GOT A DEAL.' : 'NO DEAL.',
+      76,
+      356,
+    );
 
     const summary = snapshot.summary || 'The room has delivered its verdict.';
     const words = summary.split(/\s+/);
@@ -3136,86 +3153,86 @@ export function PitchArena() {
     toolEvents,
   ]);
 
-  const startFounderCamera = useCallback(async (
-    mode: 'photo' | 'live' = 'photo',
-    includeAudio = false,
-  ) => {
-    const currentStream = cameraStreamRef.current;
-    if (currentStream?.active) {
-      if (includeAudio && !currentStream.getAudioTracks().length) {
-        try {
-          const microphone = await navigator.mediaDevices.getUserMedia({
-            video: false,
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-          microphone
-            .getAudioTracks()
-            .forEach((track) => currentStream.addTrack(track));
-        } catch {
-          setCameraMessage(
-            'Founder camera is live. Microphone access was unavailable, so recording will use available audio only.',
-          );
+  const startFounderCamera = useCallback(
+    async (mode: 'photo' | 'live' = 'photo', includeAudio = false) => {
+      const currentStream = cameraStreamRef.current;
+      if (currentStream?.active) {
+        if (includeAudio && !currentStream.getAudioTracks().length) {
+          try {
+            const microphone = await navigator.mediaDevices.getUserMedia({
+              video: false,
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            });
+            microphone
+              .getAudioTracks()
+              .forEach((track) => currentStream.addTrack(track));
+          } catch {
+            setCameraMessage(
+              'Founder camera is live. Microphone access was unavailable, so recording will use available audio only.',
+            );
+          }
         }
+        setCameraMode(mode);
+        setCameraStatus('live');
+        return currentStream;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraMode(null);
+        setCameraStatus('error');
+        setCameraMessage('This browser does not support a founder camera.');
+        return null;
       }
       setCameraMode(mode);
-      setCameraStatus('live');
-      return currentStream;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraMode(null);
-      setCameraStatus('error');
-      setCameraMessage('This browser does not support a founder camera.');
-      return null;
-    }
-    setCameraMode(mode);
-    setCameraStatus('requesting');
-    setCameraMessage(
-      includeAudio
-        ? 'Waiting for camera and microphone permission…'
-        : 'Waiting for camera permission…',
-    );
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: includeAudio
-          ? {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            }
-          : false,
-      });
-      cameraStreamRef.current = stream;
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        cameraStreamRef.current = null;
+      setCameraStatus('requesting');
+      setCameraMessage(
+        includeAudio
+          ? 'Waiting for camera and microphone permission…'
+          : 'Waiting for camera permission…',
+      );
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: includeAudio
+            ? {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              }
+            : false,
+        });
+        cameraStreamRef.current = stream;
+        stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+          cameraStreamRef.current = null;
+          setCameraMode(null);
+          setCameraStatus('off');
+          setCameraMessage('Founder camera stopped.');
+        });
+        setCameraStatus('live');
+        setCameraMessage(
+          mode === 'photo'
+            ? 'Opening the photo preview…'
+            : 'Opening founder video in the lower-left corner…',
+        );
+        return stream;
+      } catch {
         setCameraMode(null);
-        setCameraStatus('off');
-        setCameraMessage('Founder camera stopped.');
-      });
-      setCameraStatus('live');
-      setCameraMessage(
-        mode === 'photo'
-          ? 'Opening the photo preview…'
-          : 'Opening founder video in the lower-left corner…',
-      );
-      return stream;
-    } catch {
-      setCameraMode(null);
-      setCameraStatus('error');
-      setCameraMessage(
-        'Camera permission was declined or unavailable. Use Upload instead or try Chrome.',
-      );
-      return null;
-    }
-  }, []);
+        setCameraStatus('error');
+        setCameraMessage(
+          'Camera permission was declined or unavailable. Use Upload instead or try Chrome.',
+        );
+        return null;
+      }
+    },
+    [],
+  );
 
   const beginPresentationRetake = useCallback(async () => {
     const stream = await startFounderCamera('photo');
@@ -4075,7 +4092,7 @@ export function PitchArena() {
   );
 
   return (
-    <main className="room-arena text-[#f6f2e9]">
+    <main className={`room-arena room-arena-${pitch.status} text-[#f6f2e9]`}>
       <div className="room-vignette" aria-hidden="true" />
       <header className="room-header">
         <div className="room-brand">
@@ -4462,7 +4479,7 @@ export function PitchArena() {
         )}
 
         <div
-          className={`room-control-deck ${pitch.status === 'final' ? 'room-control-deck-final' : ''} ${pitchQueued ? 'room-control-deck-queued' : ''}`}
+          className={`room-control-deck ${pitch.status === 'lobby' ? 'room-control-deck-lobby' : ''} ${pitch.status === 'final' ? 'room-control-deck-final' : ''} ${pitchQueued ? 'room-control-deck-queued' : ''}`}
         >
           {pitch.status === 'lobby' && !pitchQueued && (
             <div
@@ -4494,7 +4511,16 @@ export function PitchArena() {
                   void loadPanelAgents();
                 }}
               >
-                <span className="bringmy-mark">ai→</span> BringMy.ai panel
+                {/* The supplied transparent BringMy.ai mark preserves the product's exact wordmark. */}
+                {/* oxlint-disable-next-line next/no-img-element */}
+                <img
+                  className="bringmy-mark"
+                  src="/bringmyai-panel-mark.png"
+                  alt=""
+                  width={364}
+                  height={297}
+                />
+                <span>BringMy.ai panel</span>
               </button>
             </div>
           )}
@@ -4554,40 +4580,70 @@ export function PitchArena() {
                     </div>
                     <small>Finish the pitch, then bring in your AI.</small>
                   </header>
-                  <section className="agent-mode-setup" aria-labelledby="agent-mode-title">
+                  <section
+                    className="agent-mode-setup"
+                    aria-labelledby="agent-mode-title"
+                  >
                     {agentMode === 'codex' ? (
                       <div className="agent-mode-explainer">
-                        <strong id="agent-mode-title">One complete prompt. No warm-up prompt.</strong>
-                        <span>Fill in every field and your opening pitch first. The button below copies one authorized FAST START prompt to paste into Codex or ChatGPT.</span>
+                        <strong id="agent-mode-title">
+                          One complete prompt. No warm-up prompt.
+                        </strong>
+                        <span>
+                          Fill in every field and your opening pitch first. The
+                          button below copies one authorized FAST START prompt
+                          to paste into Codex or ChatGPT.
+                        </span>
                       </div>
                     ) : (
                       <div className="panel-agent-setup">
                         <div className="agent-mode-explainer">
-                          <strong id="agent-mode-title">Cast four configured agents as the judges.</strong>
-                          <span>BringMy.ai securely seats the exact agent assigned to each turn. The agents coordinate through this room—not by impersonating one another.</span>
+                          <strong id="agent-mode-title">
+                            Cast four configured agents as the judges.
+                          </strong>
+                          <span>
+                            BringMy.ai securely seats the exact agent assigned
+                            to each turn. The agents coordinate through this
+                            room—not by impersonating one another.
+                          </span>
                         </div>
                         {!panelHostAvailable ? (
                           <div className="panel-host-notice">
-                            <strong>Open this page in BringMy.ai Browser</strong>
-                            <span>Your configured agents stay inside the signed-in browser. No separate website login or OAuth is required.</span>
+                            <strong>
+                              Open this page in BringMy.ai Browser
+                            </strong>
+                            <span>
+                              Your configured agents stay inside the signed-in
+                              browser. No separate website login or OAuth is
+                              required.
+                            </span>
                           </div>
                         ) : panelAgentsLoading ? (
-                          <div className="panel-host-notice">Loading your configured agents…</div>
+                          <div className="panel-host-notice">
+                            Loading your configured agents…
+                          </div>
                         ) : panelAgentsError ? (
-                          <div className="panel-host-notice" data-error="true">{panelAgentsError}</div>
+                          <div className="panel-host-notice" data-error="true">
+                            {panelAgentsError}
+                          </div>
                         ) : panelAgents.length < 4 ? (
                           <div className="panel-host-notice" data-error="true">
-                            Four different seat-capable agents are required. BringMy.ai currently exposed {panelAgents.length}.
+                            Four different seat-capable agents are required.
+                            BringMy.ai currently exposed {panelAgents.length}.
                           </div>
                         ) : (
                           <div className="panel-agent-grid">
                             {JUDGES.map((judge) => {
                               const assigned = panelAgents.find(
-                                (agent) => agent.key === panelAssignments[judge.id],
+                                (agent) =>
+                                  agent.key === panelAssignments[judge.id],
                               );
                               return (
                                 <label key={judge.id}>
-                                  <span><b>{judge.name}</b><small>{judge.role}</small></span>
+                                  <span>
+                                    <b>{judge.name}</b>
+                                    <small>{judge.role}</small>
+                                  </span>
                                   <select
                                     aria-label={`Agent for ${judge.name}`}
                                     value={panelAssignments[judge.id]}
@@ -4603,7 +4659,8 @@ export function PitchArena() {
                                       const usedByAnother = JUDGES.some(
                                         (other) =>
                                           other.id !== judge.id &&
-                                          panelAssignments[other.id] === agent.key,
+                                          panelAssignments[other.id] ===
+                                            agent.key,
                                       );
                                       return (
                                         <option
@@ -4616,7 +4673,11 @@ export function PitchArena() {
                                       );
                                     })}
                                   </select>
-                                  <small>{assigned ? `${assigned.kind} · ${assigned.runtime || assigned.providerKey}` : 'Unassigned seat'}</small>
+                                  <small>
+                                    {assigned
+                                      ? `${assigned.kind} · ${assigned.runtime || assigned.providerKey}`
+                                      : 'Unassigned seat'}
+                                  </small>
                                 </label>
                               );
                             })}
@@ -4800,7 +4861,8 @@ export function PitchArena() {
                             Object.values(panelAssignments).some(
                               (assignment) => !assignment,
                             ) ||
-                            new Set(Object.values(panelAssignments)).size !== 4))
+                            new Set(Object.values(panelAssignments)).size !==
+                              4))
                       }
                     >
                       {handoffStatus === 'requesting'
@@ -5217,6 +5279,19 @@ export function PitchArena() {
                 className="founder-camera-slot"
                 aria-label="Founder camera"
               >
+                {pitch.status === 'lobby' &&
+                  !founderPhoto &&
+                  cameraStatus === 'off' && (
+                    <button
+                      type="button"
+                      className="founder-photo-nudge"
+                      onClick={() => void startFounderCamera('photo')}
+                      aria-label="Add your photo so the judges can see you"
+                    >
+                      <ArrowLeft aria-hidden="true" />
+                      <span>Add your photo so the judges can see you</span>
+                    </button>
+                  )}
                 <header>
                   <span>Founder</span>
                   <strong>{pitch.founderName.trim() || 'Guest founder'}</strong>
