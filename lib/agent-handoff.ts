@@ -10,6 +10,10 @@ export type PitchAgentRequest = {
 };
 
 export type AgentHandoffResult = {
+  host: 'bringmyai';
+  status: 'accepted';
+  requestId: string;
+} | {
   host: 'clipboard';
   status: 'copied';
 };
@@ -29,6 +33,60 @@ export function buildPitchAgentWarmupPrompt(
   ].join('\n\n');
 }
 
+export type PitchAgentTurnRequest = {
+  appId: 'pitchtheai';
+  action: 'start-pitch';
+  message: string;
+  requestedTool: {
+    name: 'start_pitch';
+    arguments: {
+      roomCode: string;
+      founderName: string;
+      companyName: string;
+      askAmount: number;
+      equity: number;
+      difficulty: PitchAgentRequest['difficulty'];
+      openingPitch: string;
+      agentSignature: string;
+      pitchVenue: string;
+    };
+  };
+  context: {
+    roomUrl: string;
+    expectedTools: string[];
+  };
+};
+
+type BringMyAiPageHost = {
+  requestAgentTurn?: (
+    request: PitchAgentTurnRequest,
+  ) => Promise<{
+    ok?: boolean;
+    started?: boolean;
+    duplicate?: boolean;
+    requestId?: string;
+  }>;
+};
+
+declare global {
+  interface Window {
+    bringMyAI?: BringMyAiPageHost;
+  }
+}
+
+export const PITCH_AGENT_EXPECTED_TOOLS = [
+  'start_pitch',
+  'get_pitch_context',
+  'review_pitch_evidence',
+  'post_judge_turn',
+  'wait_for_founder_response',
+  'wait_for_founder_readiness_photo',
+  'wait_for_judge_rescue',
+  'post_bid_round',
+  'wait_for_founder_offer_decision',
+  'post_panel_verdict',
+] as const;
+
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
   return [
@@ -45,7 +103,44 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
 export async function requestPitchAgent(
   request: PitchAgentRequest,
 ): Promise<AgentHandoffResult> {
-  await navigator.clipboard.writeText(buildPitchAgentPrompt(request));
+  const message = buildPitchAgentPrompt(request);
+  const nativeRequest: PitchAgentTurnRequest = {
+    appId: 'pitchtheai',
+    action: 'start-pitch',
+    message,
+    requestedTool: {
+      name: 'start_pitch',
+      arguments: {
+        roomCode: request.roomCode,
+        founderName: request.founderName,
+        companyName: request.companyName,
+        askAmount: request.askAmount,
+        equity: request.equity,
+        difficulty: request.difficulty,
+        openingPitch: request.pitch.trim() || 'The founder will pitch by voice.',
+        agentSignature: 'Selected Bring My AI agent',
+        pitchVenue: 'Bring My AI Browser',
+      },
+    },
+    context: {
+      roomUrl: request.roomUrl,
+      expectedTools: [...PITCH_AGENT_EXPECTED_TOOLS],
+    },
+  };
+  const nativeHost =
+    typeof window !== 'undefined' ? window.bringMyAI?.requestAgentTurn : null;
+  if (typeof nativeHost === 'function') {
+    const response = await nativeHost(nativeRequest);
+    if (response?.ok && (response.started || response.duplicate)) {
+      return {
+        host: 'bringmyai',
+        status: 'accepted',
+        requestId: response.requestId || '',
+      };
+    }
+    throw new Error('Bring My AI did not accept this page agent request.');
+  }
+  await navigator.clipboard.writeText(message);
   return { host: 'clipboard', status: 'copied' };
 }
 
