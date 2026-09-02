@@ -2978,33 +2978,38 @@ textarea {
   border-radius: 14px;
   background: linear-gradient(135deg, rgb(255 193 72 / 0.045), rgb(3 7 12 / 0.74));
 }
-.agent-mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.32rem;
-  padding: 0.28rem;
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 11px;
-  background: rgb(0 0 0 / 0.32);
+.deck-agent-mode-tabs {
+  position: absolute;
+  z-index: 2;
+  top: -31px;
+  left: 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
 }
-.agent-mode-tabs button {
+.deck-agent-mode-tabs button {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  min-height: 36px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: rgb(255 255 255 / 0.52);
-  background: transparent;
-  font: 800 0.72rem var(--font-geist-sans);
+  min-height: 31px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-bottom-color: rgb(255 185 53 / 0.45);
+  border-radius: 8px 8px 0 0;
+  padding: 0.35rem 0.8rem;
+  color: rgb(255 255 255 / 0.5);
+  background: rgb(5 7 10 / 0.94);
+  font: 750 0.68rem var(--font-geist-sans);
   cursor: pointer;
 }
-.agent-mode-tabs button[aria-selected='true'] {
+.deck-agent-mode-tabs button:hover {
+  color: rgb(255 255 255 / 0.78);
+}
+.deck-agent-mode-tabs button[aria-selected='true'] {
   border-color: rgb(255 200 87 / 0.35);
-  color: #080705;
-  background: linear-gradient(135deg, #ffd572, #e6a92d);
-  box-shadow: 0 8px 24px rgb(229 165 41 / 0.18);
+  border-bottom-color: rgb(18 15 10 / 0.98);
+  color: #ffd16a;
+  background: rgb(18 15 10 / 0.98);
 }
 .bringmy-mark {
   font: 900 0.72rem var(--font-geist-mono);
@@ -5175,6 +5180,16 @@ textarea {
   .room-control-deck {
     width: calc(100% - 20px);
     margin: 1rem auto;
+  }
+  .deck-agent-mode-tabs {
+    position: relative;
+    top: auto;
+    left: auto;
+    margin: -0.25rem 0 0.45rem;
+  }
+  .deck-agent-mode-tabs button {
+    flex: 1;
+    border-radius: 7px;
   }
   .queued-pitch-card {
     position: relative;

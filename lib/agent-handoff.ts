@@ -115,17 +115,46 @@ export function hasBringMyAiPanelHost() {
   );
 }
 
-export async function listBringMyAiAgents(): Promise<BringMyAiAgent[]> {
+const PANEL_DISCOVERY_RETRY_DELAYS_MS = [0, 120, 320, 700];
+
+function isTransientPanelDiscoveryError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /visible active page|not currently registered as an AI-ready document/i.test(
+    message,
+  );
+}
+
+export async function listBringMyAiAgents(
+  { retryDelaysMs = PANEL_DISCOVERY_RETRY_DELAYS_MS }: {
+    retryDelaysMs?: number[];
+  } = {},
+): Promise<BringMyAiAgent[]> {
   const host =
     typeof window !== 'undefined' ? window.bringMyAI?.listAgentSessions : null;
   if (typeof host !== 'function') return [];
-  const response = await host();
-  if (!response?.ok || !Array.isArray(response.agents)) {
-    throw new Error('Bring My AI could not load your configured agents.');
+
+  let lastError: unknown;
+  for (const [index, delayMs] of retryDelaysMs.entries()) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+    try {
+      const response = await host();
+      if (!response?.ok || !Array.isArray(response.agents)) {
+        throw new Error('Bring My AI could not load your configured agents.');
+      }
+      return response.agents.filter(
+        (agent) => agent && agent.key && agent.title && agent.providerKey,
+      );
+    } catch (error) {
+      lastError = error;
+      const hasAnotherAttempt = index < retryDelaysMs.length - 1;
+      if (!hasAnotherAttempt || !isTransientPanelDiscoveryError(error)) {
+        throw error;
+      }
+    }
   }
-  return response.agents.filter(
-    (agent) => agent && agent.key && agent.title && agent.providerKey,
-  );
+  throw lastError;
 }
 
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {

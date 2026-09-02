@@ -5,6 +5,7 @@ import {
   PITCH_AGENT_EXPECTED_TOOLS,
   buildPanelJudgePrompt,
   buildPitchAgentPrompt,
+  listBringMyAiAgents,
   requestPitchAgentPanel,
   requestPitchAgent,
   type PitchPanelAssignments,
@@ -116,6 +117,44 @@ test('Bring My AI panel handoff preserves four exact assignments and a bounded f
   assert.equal(firstRequest.context.judgeId, 'maya');
   assert.match(firstRequest.message, /only for judgeId maya/);
   assert.match(firstRequest.message, /complete_panel_judge_turn/);
+});
+
+test('configured-agent discovery retries only while the active document is registering', async () => {
+  let attempts = 0;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      setTimeout,
+      bringMyAI: {
+        listAgentSessions: async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error(
+              'This page is not currently registered as an AI-ready document.',
+            );
+          }
+          return {
+            ok: true,
+            agents: [
+              {
+                key: 'agent:maya',
+                title: 'Maya agent',
+                provider: 'Hermes',
+                providerKey: 'hermes',
+                kind: 'cli',
+                runtime: 'Hermes CLI',
+              },
+            ],
+          };
+        },
+      },
+    },
+  });
+
+  const agents = await listBringMyAiAgents({ retryDelaysMs: [0, 0] });
+
+  assert.equal(attempts, 2);
+  assert.equal(agents[0]?.key, 'agent:maya');
 });
 
 test('every panel seat is told to re-read shared room history before acting', () => {

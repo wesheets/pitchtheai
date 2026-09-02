@@ -787,51 +787,42 @@ export function PitchArena() {
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.resolve()
-      .then(() => {
-        const available = hasBringMyAiPanelHost();
-        if (cancelled) return [];
-        setPanelHostAvailable(available);
-        if (!available) return [];
-        setPanelAgentsLoading(true);
-        setPanelAgentsError('');
-        return listBringMyAiAgents();
-      })
-      .then((agents) => {
-        if (cancelled || !agents.length) return;
-        setPanelAgents(agents);
-        setPanelAssignments((current) => {
-          const used = new Set<string>();
-          const next = { ...current };
-          for (const judge of JUDGES) {
-            const retained = agents.find(
-              (agent) => agent.key === current[judge.id] && !used.has(agent.key),
-            );
-            const selected =
-              retained ?? agents.find((agent) => !used.has(agent.key));
-            next[judge.id] = selected?.key ?? '';
-            if (selected) used.add(selected.key);
-          }
-          return next;
-        });
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setPanelAgentsError(
-            error instanceof Error
-              ? error.message
-              : 'Configured agents could not be loaded.',
+  const loadPanelAgents = useCallback(async () => {
+    const available = hasBringMyAiPanelHost();
+    setPanelHostAvailable(available);
+    setPanelAgentsError('');
+    if (!available) {
+      setPanelAgents([]);
+      return;
+    }
+
+    setPanelAgentsLoading(true);
+    try {
+      const agents = await listBringMyAiAgents();
+      setPanelAgents(agents);
+      setPanelAssignments((current) => {
+        const used = new Set<string>();
+        const next = { ...current };
+        for (const judge of JUDGES) {
+          const retained = agents.find(
+            (agent) => agent.key === current[judge.id] && !used.has(agent.key),
           );
+          const selected =
+            retained ?? agents.find((agent) => !used.has(agent.key));
+          next[judge.id] = selected?.key ?? '';
+          if (selected) used.add(selected.key);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setPanelAgentsLoading(false);
+        return next;
       });
-    return () => {
-      cancelled = true;
-    };
+    } catch (error) {
+      setPanelAgentsError(
+        error instanceof Error
+          ? error.message
+          : 'Configured agents could not be loaded.',
+      );
+    } finally {
+      setPanelAgentsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -4104,7 +4095,7 @@ export function PitchArena() {
           >
             <span className="tool-dot" />
             {toolStatus === 'ready'
-              ? '13 site tools live'
+              ? '14 site tools live'
               : 'WebMCP site tools ready'}
           </span>
           <span
@@ -4473,6 +4464,40 @@ export function PitchArena() {
         <div
           className={`room-control-deck ${pitch.status === 'final' ? 'room-control-deck-final' : ''} ${pitchQueued ? 'room-control-deck-queued' : ''}`}
         >
+          {pitch.status === 'lobby' && !pitchQueued && (
+            <div
+              className="deck-agent-mode-tabs"
+              role="tablist"
+              aria-label="Choose how AI joins"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={agentMode === 'codex'}
+                onClick={() => {
+                  setAgentMode('codex');
+                  setHandoffStatus('idle');
+                  setHandoffMessage('');
+                }}
+              >
+                Codex / ChatGPT
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={agentMode === 'bringmyai'}
+                title="BringMy.ai is a multi-agent orchestration browser."
+                onClick={() => {
+                  setAgentMode('bringmyai');
+                  setHandoffStatus('idle');
+                  setHandoffMessage('');
+                  void loadPanelAgents();
+                }}
+              >
+                <span className="bringmy-mark">ai→</span> BringMy.ai panel
+              </button>
+            </div>
+          )}
           <div className="room-metrics" aria-label="Pitch status">
             <div>
               <span>Favorability</span>
@@ -4530,33 +4555,6 @@ export function PitchArena() {
                     <small>Finish the pitch, then bring in your AI.</small>
                   </header>
                   <section className="agent-mode-setup" aria-labelledby="agent-mode-title">
-                    <div className="agent-mode-tabs" role="tablist" aria-label="Choose how AI joins">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={agentMode === 'codex'}
-                        onClick={() => {
-                          setAgentMode('codex');
-                          setHandoffStatus('idle');
-                          setHandoffMessage('');
-                        }}
-                      >
-                        Codex / ChatGPT
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={agentMode === 'bringmyai'}
-                        title="BringMy.ai is a multi-agent orchestration browser."
-                        onClick={() => {
-                          setAgentMode('bringmyai');
-                          setHandoffStatus('idle');
-                          setHandoffMessage('');
-                        }}
-                      >
-                        <span className="bringmy-mark">ai→</span> BringMy.ai panel
-                      </button>
-                    </div>
                     {agentMode === 'codex' ? (
                       <div className="agent-mode-explainer">
                         <strong id="agent-mode-title">One complete prompt. No warm-up prompt.</strong>
