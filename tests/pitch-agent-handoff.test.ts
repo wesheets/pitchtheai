@@ -3,8 +3,11 @@ import test from 'node:test';
 
 import {
   PITCH_AGENT_EXPECTED_TOOLS,
+  buildPanelJudgePrompt,
   buildPitchAgentPrompt,
+  requestPitchAgentPanel,
   requestPitchAgent,
+  type PitchPanelAssignments,
   type PitchAgentTurnRequest,
 } from '../lib/agent-handoff.ts';
 import { PITCH_FIXTURES } from './fixtures/pitches.ts';
@@ -70,6 +73,58 @@ test('a native host rejection is visible instead of silently copying', async () 
     requestPitchAgent(PITCH_FIXTURES.reefRoute),
     /did not accept this page agent request/,
   );
+});
+
+test('Bring My AI panel handoff preserves four exact assignments and a bounded first seat', async () => {
+  const assignments: PitchPanelAssignments = {
+    maya: 'connection:maya-agent',
+    julian: 'connection:julian-agent',
+    priya: 'browser:priya-agent',
+    theo: 'local:theo-agent',
+  };
+  let captured: Record<string, unknown> | null = null;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      bringMyAI: {
+        startAgentPanel: async (request: Record<string, unknown>) => {
+          captured = request;
+          return {
+            ok: true,
+            started: true,
+            panelId: 'page_panel_test_1',
+            requestId: 'page_agent_test_panel_1',
+          };
+        },
+      },
+    },
+  });
+
+  const result = await requestPitchAgentPanel(
+    PITCH_FIXTURES.shelfSignal,
+    assignments,
+  );
+
+  assert.equal(result.host, 'bringmyai');
+  assert.equal(result.panelId, 'page_panel_test_1');
+  assert.ok(captured);
+  const capturedRequest = captured as Record<string, unknown>;
+  assert.deepEqual(capturedRequest.assignments, assignments);
+  assert.equal(capturedRequest.initialJudgeId, 'maya');
+  const firstRequest = capturedRequest.request as PitchAgentTurnRequest;
+  assert.equal(firstRequest.requestedTool.name, 'start_pitch');
+  assert.equal(firstRequest.context.judgeId, 'maya');
+  assert.match(firstRequest.message, /only for judgeId maya/);
+  assert.match(firstRequest.message, /complete_panel_judge_turn/);
+});
+
+test('every panel seat is told to re-read shared room history before acting', () => {
+  for (const judgeId of ['maya', 'julian', 'priya', 'theo'] as const) {
+    const prompt = buildPanelJudgePrompt(PITCH_FIXTURES.reefRoute, judgeId);
+    assert.match(prompt, /First call get_pitch_context/);
+    assert.match(prompt, new RegExp(`judgeId ${judgeId}`));
+    assert.match(prompt, /Other configured agents own the other three judges/);
+  }
 });
 
 test('ordinary browsers retain the copy-and-paste fallback', async () => {

@@ -6,10 +6,10 @@ Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchth
 
 ## The experience
 
-1. Copy the read-only connection prompt into Codex or another WebMCP-capable browser agent. The agent attaches to the exact room while the founder continues setup; it cannot start the clock or transmit founder information.
-2. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
-3. Write or dictate the opening pitch, optionally attach evidence, and take an opt-in founder photo.
-4. Send the short generated `FAST START` prompt. It explicitly authorizes the submitted room data and evidence, and the first `start_pitch` call verifies the room code before changing state. The arena then runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session without a redundant preflight or confirmation turn.
+1. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
+2. Write or dictate the complete opening pitch, optionally attach evidence, and take an opt-in founder photo.
+3. In Codex/ChatGPT mode, copy one generated `FAST START` prompt after setup is complete. It explicitly authorizes the submitted room data and evidence, and the first `start_pitch` call verifies the room code before changing state—there is no separate warm-up prompt or redundant confirmation turn.
+4. In an optional compatible multi-agent host, assign four already-configured agents to the four judge seats. The host authorizes the panel once, routes each turn to the exact selected agent, and every new seat begins by reading the shared WebMCP room history.
 5. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
 6. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
 7. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.
@@ -33,7 +33,7 @@ The result is a live performance that neither the human nor the AI could create 
 
 ## WebMCP tools
 
-The page registers thirteen narrow tools with `document.modelContext.registerTool`:
+The page registers fourteen narrow tools with `document.modelContext.registerTool`:
 
 1. `start_pitch` — configure and start a new twenty-minute session.
 2. `update_pitch_details` — update the company, ask, equity, favorability, room mood, and soundtrack.
@@ -46,8 +46,9 @@ The page registers thirteen narrow tools with `document.modelContext.registerToo
 9. `post_judge_round` — run an optional four-judge montage without opening response gates.
 10. `post_bid_round` — place one or more offers on the founder’s deal table.
 11. `wait_for_founder_offer_decision` — wait while the founder accepts, counters, or rejects.
-12. `post_panel_verdict` — close the room and record only an explicitly accepted deal.
-13. `get_leaderboard` — read the public rankings.
+12. `complete_panel_judge_turn` — hand an optional multi-agent panel to its next host-assigned judge without exposing credentials to the page.
+13. `post_panel_verdict` — close the room and record only an explicitly accepted deal.
+14. `get_leaderboard` — read the public rankings.
 
 The arena still renders in an ordinary browser, but a WebMCP-capable agent is required to run the panel.
 
@@ -68,8 +69,8 @@ Difficulty changes how forgiving the panel is, not just the visual theme. Judges
 
 ## Data and privacy boundary
 
-Pitch The AI uses its own project-scoped Sites storage. It does not use or write
-to a Promethios database.
+Pitch The AI uses only its own project-scoped Sites storage. It does not use or
+write to another product's database.
 
 - The leaderboard stores the founder and venture names, agent signature, pitch
   venue, score, terms, difficulty, lifeline use, active duration, pause duration,
@@ -91,9 +92,9 @@ to a Promethios database.
 - Server-side ElevenLabs voice proxy with browser speech fallback
 - WebMCP site tools for the live panel protocol
 
-The browser-agent handoff is deliberately vendor-neutral: the site copies a room-bound prompt that can be pasted into a compatible agent attached to the same page.
+The browser-agent handoff is deliberately vendor-neutral: the site copies a room-bound prompt that can be pasted into a compatible agent attached to the same page. An optional host contract can list safe configured-agent metadata, authorize a four-seat panel, and route a turn to an exact opaque session key. Credentials and provider connection payloads never enter the page.
 
-The landing page also labels and links to BringMy.ai as an optional external beta for testing WebMCP with other AI providers. It is a separate product, is not required to play, and is not part of this repository or its MIT license.
+BringMy.ai Browser is one optional compatible host for that contract, similar to a website using a separately authenticated browser capability. It is a separate product, is not required to play, is not bundled with this demo, and is not covered by this repository's MIT license. A Chrome extension can implement the same host contract later without changing Pitch The AI's WebMCP protocol.
 
 ## Local development
 

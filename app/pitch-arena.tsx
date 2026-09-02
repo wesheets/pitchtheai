@@ -52,8 +52,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  hasBringMyAiPanelHost,
+  listBringMyAiAgents,
   requestPitchAgent,
-  requestPitchAgentWarmup,
+  requestPitchAgentPanel,
+  requestPitchPanelJudgeTurn,
+  type BringMyAiAgent,
+  type PitchAgentRequest,
+  type PitchPanelAssignments,
 } from '@/lib/agent-handoff';
 import {
   getVoiceProvider,
@@ -703,7 +709,14 @@ export function PitchArena() {
   const [cameraMode, setCameraMode] = useState<'photo' | 'live' | null>(null);
   const [cameraMessage, setCameraMessage] = useState('');
   const [publishFounderPhoto, setPublishFounderPhoto] = useState(false);
-  const [lobbyStep, setLobbyStep] = useState<'connect' | 'pitch'>('connect');
+  const [agentMode, setAgentMode] = useState<'codex' | 'bringmyai'>('codex');
+  const [panelHostAvailable, setPanelHostAvailable] = useState(false);
+  const [panelAgents, setPanelAgents] = useState<BringMyAiAgent[]>([]);
+  const [panelAgentsLoading, setPanelAgentsLoading] = useState(false);
+  const [panelAgentsError, setPanelAgentsError] = useState('');
+  const [panelAssignments, setPanelAssignments] =
+    useState<PitchPanelAssignments>({ maya: '', julian: '', priya: '', theo: '' });
+  const [activePanelId, setActivePanelId] = useState('');
   const [handoffStatus, setHandoffStatus] = useState<
     'idle' | 'requesting' | 'warming' | 'waiting' | 'connected' | 'error'
   >('idle');
@@ -724,6 +737,10 @@ export function PitchArena() {
   const judgeLifelineRef = useRef(judgeLifeline);
   const presentationResetRef = useRef(presentationReset);
   const pauseStateRef = useRef(pauseState);
+  const panelIdRef = useRef('');
+  const panelExpectedJudgeRef = useRef<JudgeId | null>(null);
+  const panelCompletedJudgesRef = useRef<Set<JudgeId>>(new Set());
+  const panelPitchRequestRef = useRef<PitchAgentRequest | null>(null);
   const appealedJudgeIdsRef = useRef<Set<JudgeId>>(new Set());
   const answerQualityRef = useRef<Record<AnswerQuality, number>>({
     ...EMPTY_ANSWER_QUALITY,
@@ -769,6 +786,53 @@ export function PitchArena() {
   const recordingDrawTimerRef = useRef<number | null>(null);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve()
+      .then(() => {
+        const available = hasBringMyAiPanelHost();
+        if (cancelled) return [];
+        setPanelHostAvailable(available);
+        if (!available) return [];
+        setPanelAgentsLoading(true);
+        setPanelAgentsError('');
+        return listBringMyAiAgents();
+      })
+      .then((agents) => {
+        if (cancelled || !agents.length) return;
+        setPanelAgents(agents);
+        setPanelAssignments((current) => {
+          const used = new Set<string>();
+          const next = { ...current };
+          for (const judge of JUDGES) {
+            const retained = agents.find(
+              (agent) => agent.key === current[judge.id] && !used.has(agent.key),
+            );
+            const selected =
+              retained ?? agents.find((agent) => !used.has(agent.key));
+            next[judge.id] = selected?.key ?? '';
+            if (selected) used.add(selected.key);
+          }
+          return next;
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPanelAgentsError(
+            error instanceof Error
+              ? error.message
+              : 'Configured agents could not be loaded.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPanelAgentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const hydrateRoom = window.setTimeout(() => {
@@ -876,7 +940,6 @@ export function PitchArena() {
         draftRef.current = queued.openingPitch;
         setPitch(restoredPitch);
         setDraft(queued.openingPitch);
-        setLobbyStep('pitch');
         setHandoffStatus('waiting');
         setHandoffMessage(queued.handoffMessage);
       }
@@ -1403,33 +1466,6 @@ export function PitchArena() {
     },
     [stopVoices],
   );
-  const warmUpAgent = useCallback(async () => {
-    if (!roomReady || !validRoomCode(roomCode)) {
-      setHandoffStatus('error');
-      setHandoffMessage('The room is still initializing. Try again.');
-      return;
-    }
-    setHandoffStatus('requesting');
-    setHandoffMessage('Preparing your AI connection prompt…');
-    try {
-      await requestPitchAgentWarmup({
-        roomCode,
-        roomUrl: window.location.href,
-      });
-      setLobbyStep('pitch');
-      setHandoffStatus('warming');
-      setHandoffMessage(
-        'Connection prompt copied. Paste and send it to Codex or your browser AI, then fill out your pitch while it attaches.',
-      );
-    } catch (error) {
-      setHandoffStatus('error');
-      setHandoffMessage(
-        error instanceof Error
-          ? error.message
-          : 'The connection prompt could not be copied.',
-      );
-    }
-  }, [roomCode, roomReady]);
   const requestAgent = useCallback(async () => {
     if (!roomReady || !validRoomCode(roomCode)) {
       setHandoffStatus('error');
@@ -1459,10 +1495,14 @@ export function PitchArena() {
       return;
     }
     setHandoffStatus('requesting');
-    setHandoffMessage('Handing the room to your agent…');
+    setHandoffMessage(
+      agentMode === 'bringmyai'
+        ? 'Seating your four-agent panel…'
+        : 'Preparing one complete FAST START prompt…',
+    );
     try {
       await enableMusic();
-      const handoff = await requestPitchAgent({
+      const agentRequest: PitchAgentRequest = {
         roomCode,
         roomUrl: window.location.href,
         founderName,
@@ -1471,11 +1511,35 @@ export function PitchArena() {
         equity: pitch.equity,
         difficulty: pitch.difficulty,
         pitch: draft,
-      });
+      };
+      if (agentMode === 'bringmyai') {
+        if (!panelHostAvailable) {
+          throw new Error(
+            'Open this room in Bring My AI Browser to choose configured agents.',
+          );
+        }
+        const selected = Object.values(panelAssignments);
+        if (selected.some((key) => !key) || new Set(selected).size !== 4) {
+          throw new Error('Assign four different configured agents to the panel.');
+        }
+      }
+      const handoff =
+        agentMode === 'bringmyai'
+          ? await requestPitchAgentPanel(agentRequest, panelAssignments)
+          : await requestPitchAgent(agentRequest);
+      const activePanelId =
+        handoff.host === 'bringmyai' ? handoff.panelId ?? '' : '';
+      panelIdRef.current = activePanelId;
+      setActivePanelId(activePanelId);
+      panelExpectedJudgeRef.current = activePanelId ? 'maya' : null;
+      panelCompletedJudgesRef.current = new Set();
+      panelPitchRequestRef.current = activePanelId ? agentRequest : null;
       if (pitchRef.current.status === 'live') return;
       const waitingMessage =
-        handoff.host === 'bringmyai'
-          ? 'Sent to your selected AI. It is joining this room now.'
+        activePanelId
+          ? 'Four seats authorized. Maya’s assigned agent is entering first; the room will hand off each judge turn.'
+          : handoff.host === 'bringmyai'
+            ? 'Sent to your selected AI. It is joining this room now.'
           : 'Fast-start prompt copied. Paste and send it once—your agent is authorized to enter immediately without a second confirmation.';
       writeQueuedPitchSession({
         version: 1,
@@ -1498,7 +1562,16 @@ export function PitchArena() {
           : 'The agent handoff did not start.',
       );
     }
-  }, [draft, enableMusic, pitch, roomCode, roomReady]);
+  }, [
+    agentMode,
+    draft,
+    enableMusic,
+    panelAssignments,
+    panelHostAvailable,
+    pitch,
+    roomCode,
+    roomReady,
+  ]);
   const updatePitchDetails = useCallback((update: PitchDetailsUpdate) => {
     setPitch((current) => ({
       ...current,
@@ -1528,7 +1601,11 @@ export function PitchArena() {
     setCounterEquity('');
     setCounterNote('');
     setDraft('');
-    setLobbyStep('connect');
+    panelIdRef.current = '';
+    setActivePanelId('');
+    panelExpectedJudgeRef.current = null;
+    panelCompletedJudgesRef.current = new Set();
+    panelPitchRequestRef.current = null;
     setHandoffStatus('idle');
     setHandoffMessage('');
     setPublishFounderPhoto(false);
@@ -2591,6 +2668,56 @@ export function PitchArena() {
     });
   }, [finalizePitch, stopVoices]);
 
+  const completePanelJudgeTurn = useCallback(
+    async (judgeId: JudgeId, handoffSummary: string) => {
+      const panelId = panelIdRef.current;
+      const request = panelPitchRequestRef.current;
+      if (!panelId || !request) {
+        throw new Error(
+          'No compatible four-agent panel is active in this room.',
+        );
+      }
+      if (pitchRef.current.status !== 'live') {
+        return { status: 'pitch_complete' };
+      }
+      if (panelExpectedJudgeRef.current !== judgeId) {
+        throw new Error(
+          `This seat belongs to ${panelExpectedJudgeRef.current ?? 'the next assigned judge'}, not ${judgeId}.`,
+        );
+      }
+      panelCompletedJudgesRef.current.add(judgeId);
+      const nextJudge = JUDGES.find(
+        (judge) => !panelCompletedJudgesRef.current.has(judge.id),
+      );
+      if (!nextJudge) {
+        panelExpectedJudgeRef.current = null;
+        setHandoffMessage(
+          'All four assigned agents completed their seats. The final judge is closing the room.',
+        );
+        return {
+          status: 'panel_complete',
+          completedJudges: [...panelCompletedJudgesRef.current],
+          handoffSummary,
+          next:
+            'All four assigned judge seats are complete. You are the closing agent: make any earned offer, wait for the founder decision if needed, then call post_panel_verdict.',
+        };
+      }
+      panelExpectedJudgeRef.current = nextJudge.id;
+      setHandoffMessage(
+        `${nextJudge.name} is next. Bring My AI is seating that assigned agent now.`,
+      );
+      await requestPitchPanelJudgeTurn(request, panelId, nextJudge.id);
+      return {
+        status: 'next_agent_started',
+        completedJudgeId: judgeId,
+        nextJudgeId: nextJudge.id,
+        handoffSummary,
+        next: `The assigned agent for ${nextJudge.name} has been started. Stop this turn.`,
+      };
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!roomReady || !validRoomCode(roomCode)) return;
     const unregister = registerPitchTools({
@@ -2637,6 +2764,7 @@ export function PitchArena() {
       waitForFounderReadinessPhoto,
       waitForJudgeRescue,
       waitForFounderOfferDecision,
+      completePanelJudgeTurn,
       applyBidRound,
       finalizePitch,
       fetchLeaderboard,
@@ -2668,6 +2796,7 @@ export function PitchArena() {
     applyBidRound,
     applyJudgeRound,
     applyJudgeTurn,
+    completePanelJudgeTurn,
     fetchLeaderboard,
     finalizePitch,
     startPitch,
@@ -4218,6 +4347,17 @@ export function PitchArena() {
           {JUDGES.map((judge) => {
             const reaction = reactions[judge.id];
             const judgeBid = bids.find((bid) => bid.judgeId === judge.id);
+            const assignedPanelAgent = panelAgents.find(
+              (agent) => agent.key === panelAssignments[judge.id],
+            );
+            const controllerName = activePanelId
+              ? assignedPanelAgent?.title || 'Assigned configured agent'
+              : pitch.agentSignature;
+            const controllerVenue = activePanelId
+              ? [assignedPanelAgent?.provider, assignedPanelAgent?.runtime]
+                  .filter(Boolean)
+                  .join(' · ') || 'Compatible multi-agent host'
+              : pitch.pitchVenue;
             const isActiveTurn =
               speakingJudge === judge.id ||
               ((founderTurn.status === 'presenting' ||
@@ -4268,6 +4408,13 @@ export function PitchArena() {
                       <div className="monitor-bid">
                         {money(judgeBid.amount)}{' '}
                         <small>for {judgeBid.equity}%</small>
+                      </div>
+                    )}
+                    {pitch.status !== 'lobby' && (
+                      <div className="monitor-controller">
+                        <span>Controlled by</span>
+                        <strong>{controllerName}</strong>
+                        <small>{controllerVenue}</small>
                       </div>
                     )}
                   </div>
@@ -4374,73 +4521,112 @@ export function PitchArena() {
                 )}
               </div>
               {pitch.status === 'lobby' ? (
-                lobbyStep === 'connect' ? (
-                  <section className="ai-connect-step" aria-labelledby="connect-ai-title">
-                    <header>
-                      <div>
-                        <span>Step 1 of 2 · Connect your AI</span>
-                        <h2 id="connect-ai-title">Invite your AI before you build the pitch.</h2>
-                      </div>
-                      <b>Recommended for Codex</b>
-                    </header>
-                    <div className="ai-connect-grid">
-                      <ol>
-                        <li>
-                          <strong>Copy the connection prompt</strong>
-                          <span>It contains this room code and performs a read-only attachment check.</span>
-                        </li>
-                        <li>
-                          <strong>Paste and send it to Codex or your browser AI</strong>
-                          <span>Keep this Pitch The AI tab open. Your AI will confirm when it is attached.</span>
-                        </li>
-                        <li>
-                          <strong>Fill out your pitch while the AI warms up</strong>
-                          <span>You will send one short FAST START message when your setup is complete.</span>
-                        </li>
-                      </ol>
-                      <div className="ai-connect-actions">
-                        <Button
-                          className="enter-room-button"
-                          onClick={() => void warmUpAgent()}
-                          disabled={handoffStatus === 'requesting' || !roomReady}
-                        >
-                          {handoffStatus === 'requesting'
-                            ? 'Preparing connection…'
-                            : 'Copy AI connection prompt'}{' '}
-                          <ArrowUpRight data-icon="inline-end" />
-                        </Button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLobbyStep('pitch');
-                            setHandoffStatus('idle');
-                            setHandoffMessage(
-                              'You can still connect your AI with the final FAST START prompt.',
-                            );
-                          }}
-                        >
-                          Skip and set up my pitch
-                        </button>
-                        <small>
-                          This first prompt cannot start the clock or send founder information.
-                        </small>
-                      </div>
-                    </div>
-                  </section>
-                ) : (
                 <div className="opening-pitch-form">
                   <header className="game-setup-intro">
                     <div>
-                      <span>Step 2 of 2 · Game board setup</span>
+                      <span>Game board setup</span>
                       <h2>Set the terms. Make your case.</h2>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setLobbyStep('connect')}
-                    >
-                      AI connection instructions
-                    </button>
+                    <small>Finish the pitch, then bring in your AI.</small>
                   </header>
+                  <section className="agent-mode-setup" aria-labelledby="agent-mode-title">
+                    <div className="agent-mode-tabs" role="tablist" aria-label="Choose how AI joins">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={agentMode === 'codex'}
+                        onClick={() => {
+                          setAgentMode('codex');
+                          setHandoffStatus('idle');
+                          setHandoffMessage('');
+                        }}
+                      >
+                        Codex / ChatGPT
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={agentMode === 'bringmyai'}
+                        title="BringMy.ai is a multi-agent orchestration browser."
+                        onClick={() => {
+                          setAgentMode('bringmyai');
+                          setHandoffStatus('idle');
+                          setHandoffMessage('');
+                        }}
+                      >
+                        <span className="bringmy-mark">ai→</span> BringMy.ai panel
+                      </button>
+                    </div>
+                    {agentMode === 'codex' ? (
+                      <div className="agent-mode-explainer">
+                        <strong id="agent-mode-title">One complete prompt. No warm-up prompt.</strong>
+                        <span>Fill in every field and your opening pitch first. The button below copies one authorized FAST START prompt to paste into Codex or ChatGPT.</span>
+                      </div>
+                    ) : (
+                      <div className="panel-agent-setup">
+                        <div className="agent-mode-explainer">
+                          <strong id="agent-mode-title">Cast four configured agents as the judges.</strong>
+                          <span>BringMy.ai securely seats the exact agent assigned to each turn. The agents coordinate through this room—not by impersonating one another.</span>
+                        </div>
+                        {!panelHostAvailable ? (
+                          <div className="panel-host-notice">
+                            <strong>Open this page in BringMy.ai Browser</strong>
+                            <span>Your configured agents stay inside the signed-in browser. No separate website login or OAuth is required.</span>
+                          </div>
+                        ) : panelAgentsLoading ? (
+                          <div className="panel-host-notice">Loading your configured agents…</div>
+                        ) : panelAgentsError ? (
+                          <div className="panel-host-notice" data-error="true">{panelAgentsError}</div>
+                        ) : panelAgents.length < 4 ? (
+                          <div className="panel-host-notice" data-error="true">
+                            Four different seat-capable agents are required. BringMy.ai currently exposed {panelAgents.length}.
+                          </div>
+                        ) : (
+                          <div className="panel-agent-grid">
+                            {JUDGES.map((judge) => {
+                              const assigned = panelAgents.find(
+                                (agent) => agent.key === panelAssignments[judge.id],
+                              );
+                              return (
+                                <label key={judge.id}>
+                                  <span><b>{judge.name}</b><small>{judge.role}</small></span>
+                                  <select
+                                    aria-label={`Agent for ${judge.name}`}
+                                    value={panelAssignments[judge.id]}
+                                    onChange={(event) =>
+                                      setPanelAssignments((current) => ({
+                                        ...current,
+                                        [judge.id]: event.target.value,
+                                      }))
+                                    }
+                                  >
+                                    <option value="">Choose an agent…</option>
+                                    {panelAgents.map((agent) => {
+                                      const usedByAnother = JUDGES.some(
+                                        (other) =>
+                                          other.id !== judge.id &&
+                                          panelAssignments[other.id] === agent.key,
+                                      );
+                                      return (
+                                        <option
+                                          key={agent.key}
+                                          value={agent.key}
+                                          disabled={usedByAnother}
+                                        >
+                                          {agent.title} · {agent.provider}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                  <small>{assigned ? `${assigned.kind} · ${assigned.runtime || assigned.providerKey}` : 'Unassigned seat'}</small>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
                   <div className="game-setup-fields">
                     <label
                       htmlFor="pitch-founder-name"
@@ -4607,25 +4793,38 @@ export function PitchArena() {
                     <Button
                       className="enter-room-button"
                       onClick={() => void requestAgent()}
-                      disabled={handoffStatus === 'requesting' || !roomReady}
+                      disabled={
+                        handoffStatus === 'requesting' ||
+                        !roomReady ||
+                        (agentMode === 'bringmyai' &&
+                          (!panelHostAvailable ||
+                            panelAgents.length < 4 ||
+                            Object.values(panelAssignments).some(
+                              (assignment) => !assignment,
+                            ) ||
+                            new Set(Object.values(panelAssignments)).size !== 4))
+                      }
                     >
                       {handoffStatus === 'requesting'
-                        ? 'Preparing the room…'
-                        : handoffStatus === 'connected'
-                          ? 'AI connected — send FAST START'
-                          : 'Enter room with your AI'}{' '}
+                        ? agentMode === 'bringmyai'
+                          ? 'Seating four agents…'
+                          : 'Copying FAST START…'
+                        : agentMode === 'bringmyai'
+                          ? 'Start with this AI panel'
+                          : 'Copy full pitch & invite your AI'}{' '}
                       <ArrowUpRight data-icon="inline-end" />
                     </Button>
                     <div className="opening-handoff-note">
                       <Clock3 />
                       <output data-error={handoffStatus === 'error'}>
                         {handoffMessage ||
-                          'When your AI joins the room, the 3–2–1 begins and the clock starts.'}
+                          (agentMode === 'bringmyai'
+                            ? 'BringMy.ai will start the assigned Maya agent, then hand each completed judge seat to the next selected agent.'
+                            : 'After the full pitch is filled in, paste the copied prompt once. The 3–2–1 begins when your AI joins.')}
                       </output>
                     </div>
                   </div>
                 </div>
-                )
               ) : pitch.status === 'final' ? (
                 <div className="arena-final-summary">
                   <div className="arena-final-score">

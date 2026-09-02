@@ -118,6 +118,10 @@ type PitchToolOptions = {
   waitForFounderOfferDecision: (
     timeoutSeconds?: number,
   ) => Promise<Record<string, unknown>>;
+  completePanelJudgeTurn: (
+    judgeId: JudgeId,
+    handoffSummary: string,
+  ) => Promise<Record<string, unknown>>;
   applyBidRound: (bids: Bid[]) => void;
   finalizePitch: (result: {
     score: number;
@@ -737,6 +741,31 @@ export function registerPitchTools(options: PitchToolOptions) {
         additionalProperties: false,
       },
       execute: () => optionsRef.current.waitForJudgeRescue(),
+    },
+    {
+      name: 'complete_panel_judge_turn',
+      description:
+        'Compatible four-agent panel hosts only: release your assigned judge seat after you have completed exactly one judge cycle and every founder-answer, rescue, or presentation-reset gate you opened is closed. The room will securely wake the configured agent assigned to the next judge. Never use this during a normal single-agent Codex or ChatGPT pitch. If the result says panel_complete, the current final-seat agent must close the room with any earned offer and post_panel_verdict.',
+      inputSchema: {
+        type: 'object',
+        required: ['judgeId', 'handoffSummary'],
+        properties: {
+          judgeId: judgeIdSchema,
+          handoffSummary: { type: 'string', minLength: 1, maxLength: 500 },
+        },
+        additionalProperties: false,
+      },
+      execute: (args) => {
+        const judgeId = args.judgeId as JudgeId;
+        requireFounderTurnComplete();
+        requireOfferDecisionComplete();
+        requireJudgeRescueComplete(judgeId);
+        requirePresentationResetComplete(judgeId);
+        return optionsRef.current.completePanelJudgeTurn(
+          judgeId,
+          String(args.handoffSummary),
+        );
+      },
     },
     {
       name: 'post_judge_round',

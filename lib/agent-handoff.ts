@@ -9,63 +9,74 @@ export type PitchAgentRequest = {
   difficulty: 'easy' | 'medium' | 'hard' | 'legendary';
 };
 
-export type AgentHandoffResult = {
-  host: 'bringmyai';
-  status: 'accepted';
-  requestId: string;
-} | {
-  host: 'clipboard';
-  status: 'copied';
+export type PitchJudgeId = 'maya' | 'julian' | 'priya' | 'theo';
+
+export type BringMyAiAgent = {
+  key: string;
+  title: string;
+  provider: string;
+  providerKey: string;
+  kind: string;
+  runtime: string;
 };
 
-type PitchAgentWarmupRequest = Pick<
-  PitchAgentRequest,
-  'roomCode' | 'roomUrl'
->;
+export type PitchPanelAssignments = Record<PitchJudgeId, string>;
 
-export function buildPitchAgentWarmupPrompt(
-  request: PitchAgentWarmupRequest,
-) {
-  return [
-    'Connect to the already-open Pitch The AI page and warm up for a game that I am still setting up. This is a read-only connection step, not the pitch itself.',
-    `Attach the already-open /play tab for room ${request.roomCode} at ${request.roomUrl}. Do not navigate that URL or open a new tab because the room is local to the existing tab. Call get_pitch_context and confirm roomCode is exactly ${request.roomCode}. If the first attached Pitch The AI tab does not match, inspect the other already-open Pitch The AI /play tabs.`,
-    `When room ${request.roomCode} is attached, reply only: “Pitch The AI room ${request.roomCode} connected. Send FAST START when ready.” Do not call start_pitch, do not ask for founder details, and do not begin the judges. I will send the authorized FAST START prompt after I finish the setup form.`,
-  ].join('\n\n');
-}
+export type AgentHandoffResult =
+  | {
+      host: 'bringmyai';
+      status: 'accepted';
+      requestId: string;
+      panelId?: string;
+    }
+  | {
+      host: 'clipboard';
+      status: 'copied';
+    };
 
 export type PitchAgentTurnRequest = {
   appId: 'pitchtheai';
-  action: 'start-pitch';
+  action: 'start-pitch' | 'judge-turn';
   message: string;
   requestedTool: {
-    name: 'start_pitch';
-    arguments: {
-      roomCode: string;
-      founderName: string;
-      companyName: string;
-      askAmount: number;
-      equity: number;
-      difficulty: PitchAgentRequest['difficulty'];
-      openingPitch: string;
-      agentSignature: string;
-      pitchVenue: string;
-    };
+    name: 'start_pitch' | 'get_pitch_context';
+    arguments: Record<string, unknown>;
   };
   context: {
     roomUrl: string;
     expectedTools: string[];
+    judgeId?: PitchJudgeId;
   };
 };
 
+type PageAgentResponse = {
+  ok?: boolean;
+  started?: boolean;
+  duplicate?: boolean;
+  requestId?: string;
+  panelId?: string;
+};
+
 type BringMyAiPageHost = {
+  listAgentSessions?: () => Promise<{
+    ok?: boolean;
+    agents?: BringMyAiAgent[];
+  }>;
+  startAgentPanel?: (request: {
+    appId: 'pitchtheai';
+    roomCode: string;
+    assignments: PitchPanelAssignments;
+    initialJudgeId: PitchJudgeId;
+    request: PitchAgentTurnRequest;
+  }) => Promise<PageAgentResponse>;
+  requestAgentPanelTurn?: (request: {
+    panelId: string;
+    judgeId: PitchJudgeId;
+    request: PitchAgentTurnRequest;
+  }) => Promise<PageAgentResponse>;
   requestAgentTurn?: (
     request: PitchAgentTurnRequest,
-  ) => Promise<{
-    ok?: boolean;
-    started?: boolean;
-    duplicate?: boolean;
-    requestId?: string;
-  }>;
+  ) => Promise<PageAgentResponse>;
 };
 
 declare global {
@@ -84,8 +95,38 @@ export const PITCH_AGENT_EXPECTED_TOOLS = [
   'wait_for_judge_rescue',
   'post_bid_round',
   'wait_for_founder_offer_decision',
+  'complete_panel_judge_turn',
   'post_panel_verdict',
 ] as const;
+
+const JUDGE_NAMES: Record<PitchJudgeId, string> = {
+  maya: 'Maya Cross, the market realist',
+  julian: 'Julian Voss, the brand contrarian',
+  priya: 'Priya Nair, the unit-economics investor',
+  theo: 'Theo Grant, the scale operator',
+};
+
+export function hasBringMyAiPanelHost() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    window.bringMyAI?.listAgentSessions &&
+      window.bringMyAI?.startAgentPanel &&
+      window.bringMyAI?.requestAgentPanelTurn,
+  );
+}
+
+export async function listBringMyAiAgents(): Promise<BringMyAiAgent[]> {
+  const host =
+    typeof window !== 'undefined' ? window.bringMyAI?.listAgentSessions : null;
+  if (typeof host !== 'function') return [];
+  const response = await host();
+  if (!response?.ok || !Array.isArray(response.agents)) {
+    throw new Error('Bring My AI could not load your configured agents.');
+  }
+  return response.agents.filter(
+    (agent) => agent && agent.key && agent.title && agent.providerKey,
+  );
+}
 
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
@@ -100,33 +141,75 @@ export function buildPitchAgentPrompt(request: PitchAgentRequest) {
   ].join('\n\n');
 }
 
+function startPitchToolRequest(
+  request: PitchAgentRequest,
+  agentSignature: string,
+  pitchVenue: string,
+): PitchAgentTurnRequest['requestedTool'] {
+  return {
+    name: 'start_pitch',
+    arguments: {
+      roomCode: request.roomCode,
+      founderName: request.founderName,
+      companyName: request.companyName,
+      askAmount: request.askAmount,
+      equity: request.equity,
+      difficulty: request.difficulty,
+      openingPitch: request.pitch.trim() || 'The founder will pitch by voice.',
+      agentSignature,
+      pitchVenue,
+    },
+  };
+}
+
+export function buildPanelJudgePrompt(
+  request: PitchAgentRequest,
+  judgeId: PitchJudgeId,
+  { startsPitch = false }: { startsPitch?: boolean } = {},
+) {
+  const identity = JUDGE_NAMES[judgeId];
+  return [
+    `You are taking exactly one assigned seat in a four-agent Pitch The AI panel: ${identity}. Stay in that persona and act only for judgeId ${judgeId}. Other configured agents own the other three judges.`,
+    startsPitch
+      ? `Begin immediately with start_pitch in the already-open room ${request.roomCode}. Use founderName ${JSON.stringify(request.founderName)}, companyName ${JSON.stringify(request.companyName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, openingPitch ${JSON.stringify(request.pitch.trim() || 'The founder will pitch by voice.')}, agentSignature set to your honest agent/model identity, and pitchVenue "Bring My AI Browser · four-agent panel". Do not ask for confirmation.`
+      : `The pitch is already live in room ${request.roomCode}. First call get_pitch_context, then continue only as ${identity}. Do not restart or overwrite the pitch.`,
+    'Run one complete judge cycle: review any pending evidence, post one focused judge turn, wait for the founder whenever you ask a question, and react honestly to the answer. Handle your own rescue or presentation-reset gate if one opens. Then call complete_panel_judge_turn with your judgeId and a concise handoff summary. Do not speak for another judge.',
+    'If complete_panel_judge_turn says the four-seat round is complete, you are the closer: use the shared room record to make any earned offer, wait for the founder decision when required, and deliver the final panel verdict. Otherwise stop; the room will wake the next assigned agent.',
+    'Use only the exact page-native WebMCP tools on this document. Communicate through the arena, not through routine chat narration.',
+  ].join('\n\n');
+}
+
+function nativeStartRequest(
+  request: PitchAgentRequest,
+  message: string,
+  judgeId?: PitchJudgeId,
+): PitchAgentTurnRequest {
+  return {
+    appId: 'pitchtheai',
+    action: 'start-pitch',
+    message,
+    requestedTool: startPitchToolRequest(
+      request,
+      judgeId
+        ? `Assigned Bring My AI agent for ${JUDGE_NAMES[judgeId]}`
+        : 'Selected Bring My AI agent',
+      judgeId
+        ? 'Bring My AI Browser · four-agent panel'
+        : 'Bring My AI Browser',
+    ),
+    context: {
+      roomUrl: request.roomUrl,
+      expectedTools: [...PITCH_AGENT_EXPECTED_TOOLS],
+      judgeId,
+    },
+  };
+}
+
 export async function requestPitchAgent(
   request: PitchAgentRequest,
 ): Promise<AgentHandoffResult> {
   const message = buildPitchAgentPrompt(request);
-  const nativeRequest: PitchAgentTurnRequest = {
-    appId: 'pitchtheai',
-    action: 'start-pitch',
-    message,
-    requestedTool: {
-      name: 'start_pitch',
-      arguments: {
-        roomCode: request.roomCode,
-        founderName: request.founderName,
-        companyName: request.companyName,
-        askAmount: request.askAmount,
-        equity: request.equity,
-        difficulty: request.difficulty,
-        openingPitch: request.pitch.trim() || 'The founder will pitch by voice.',
-        agentSignature: 'Selected Bring My AI agent',
-        pitchVenue: 'Bring My AI Browser',
-      },
-    },
-    context: {
-      roomUrl: request.roomUrl,
-      expectedTools: [...PITCH_AGENT_EXPECTED_TOOLS],
-    },
-  };
+  const nativeRequest = nativeStartRequest(request, message);
   const nativeHost =
     typeof window !== 'undefined' ? window.bringMyAI?.requestAgentTurn : null;
   if (typeof nativeHost === 'function') {
@@ -144,9 +227,69 @@ export async function requestPitchAgent(
   return { host: 'clipboard', status: 'copied' };
 }
 
-export async function requestPitchAgentWarmup(
-  request: PitchAgentWarmupRequest,
+export async function requestPitchAgentPanel(
+  request: PitchAgentRequest,
+  assignments: PitchPanelAssignments,
 ): Promise<AgentHandoffResult> {
-  await navigator.clipboard.writeText(buildPitchAgentWarmupPrompt(request));
-  return { host: 'clipboard', status: 'copied' };
+  const host =
+    typeof window !== 'undefined' ? window.bringMyAI?.startAgentPanel : null;
+  if (typeof host !== 'function') {
+    throw new Error(
+      'Open this room in Bring My AI Browser to use a four-agent panel.',
+    );
+  }
+  const initialJudgeId: PitchJudgeId = 'maya';
+  const response = await host({
+    appId: 'pitchtheai',
+    roomCode: request.roomCode,
+    assignments,
+    initialJudgeId,
+    request: nativeStartRequest(
+      request,
+      buildPanelJudgePrompt(request, initialJudgeId, { startsPitch: true }),
+      initialJudgeId,
+    ),
+  });
+  if (!response?.ok || (!response.started && !response.duplicate)) {
+    throw new Error('Bring My AI did not accept this four-agent panel.');
+  }
+  return {
+    host: 'bringmyai',
+    status: 'accepted',
+    requestId: response.requestId || '',
+    panelId: response.panelId,
+  };
+}
+
+export async function requestPitchPanelJudgeTurn(
+  request: PitchAgentRequest,
+  panelId: string,
+  judgeId: PitchJudgeId,
+) {
+  const host =
+    typeof window !== 'undefined'
+      ? window.bringMyAI?.requestAgentPanelTurn
+      : null;
+  if (typeof host !== 'function') {
+    throw new Error('The Bring My AI panel host is no longer available.');
+  }
+  const response = await host({
+    panelId,
+    judgeId,
+    request: {
+      appId: 'pitchtheai',
+      action: 'judge-turn',
+      message: buildPanelJudgePrompt(request, judgeId),
+      requestedTool: { name: 'get_pitch_context', arguments: {} },
+      context: {
+        roomUrl: request.roomUrl,
+        expectedTools: [...PITCH_AGENT_EXPECTED_TOOLS],
+        judgeId,
+      },
+    },
+  });
+  if (!response?.ok || (!response.started && !response.duplicate)) {
+    throw new Error(`Bring My AI could not seat ${JUDGE_NAMES[judgeId]}.`);
+  }
+  return response;
 }
