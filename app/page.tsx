@@ -205,11 +205,9 @@ export default function Home() {
             <div>
               <p>Your pitch stage</p>
               <h2>Set the terms. Make your case.</h2>
-              <div className="landing-field-row">
-                <span>Founder name…</span>
-                <span>Venture name…</span>
-                <span>Ask (USD)…</span>
-                <span>Equity (%)…</span>
+              <div className="landing-preview-note">
+                <strong>Connect your AI first.</strong>
+                <span>Then enter the arena to add your founder, venture, terms, and opening pitch.</span>
               </div>
               <div className="landing-difficulty-row">
                 <span>Difficulty</span>

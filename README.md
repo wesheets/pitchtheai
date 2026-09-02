@@ -6,16 +6,17 @@ Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchth
 
 ## The experience
 
-1. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
-2. Write or dictate the opening pitch, optionally attach evidence, and take an opt-in founder photo.
-3. Copy the generated panel prompt into a WebMCP-capable browser agent. The arena verifies the room code, runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session.
-4. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
-5. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
-6. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.
-7. Judges can laugh, become exasperated, demand a presentation reset, or leave with a specific reason. A one-use **Wait, don’t go!** lifeline gives the founder twenty seconds to rescue an eliminated judge.
-8. Interested judges can make visible bids and compete. The founder—not the agent—accepts, counters, or rejects each offer.
-9. Refreshing the tab restores the exact live room. A separate one-use founder pause freezes the room, costs the least-interested investor, and records the pause duration on the public result.
-10. The room closes with a large, candid verdict, a score grounded in what actually happened, and an optional public leaderboard entry.
+1. Copy the read-only connection prompt into Codex or another WebMCP-capable browser agent. The agent attaches to the exact room while the founder continues setup; it cannot start the clock or transmit founder information.
+2. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
+3. Write or dictate the opening pitch, optionally attach evidence, and take an opt-in founder photo.
+4. Send the short generated `FAST START` prompt. It explicitly authorizes the submitted room data and evidence, and the first `start_pitch` call verifies the room code before changing state. The arena then runs a 3–2–1 countdown, changes the soundtrack, and starts a twenty-minute session without a redundant preflight or confirmation turn.
+5. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
+6. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
+7. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.
+8. Judges can laugh, become exasperated, demand a presentation reset, or leave with a specific reason. A one-use **Wait, don’t go!** lifeline gives the founder twenty seconds to rescue an eliminated judge.
+9. Interested judges can make visible bids and compete. The founder—not the agent—accepts, counters, or rejects each offer.
+10. Refreshing the tab restores the exact live room. A separate one-use founder pause freezes the room, costs the least-interested investor, and records the pause duration on the public result.
+11. A verdict closes the room normally. If the twenty-minute clock reaches zero first, the arena declares **OUT OF TIME**, dismisses every remaining investor, closes all response gates, and records a timeout result.
 
 Equity set to zero activates competition mode, which judges the WebMCP experience, implementation, originality, resilience, and human–agent collaboration instead of pretending there is a startup equity transaction.
 
@@ -39,9 +40,9 @@ The page registers thirteen narrow tools with `document.modelContext.registerToo
 3. `get_pitch_context` — read the transcript, evidence queue, panel state, and game directives.
 4. `review_pitch_evidence` — confirm that uploaded evidence was actually inspected.
 5. `post_judge_turn` — give exactly one judge the floor and optionally ask one question.
-6. `wait_for_founder_response` — hold the panel at the shared 45-second response gate.
+6. `wait_for_founder_response` — hold the panel at the difficulty-specific 45–90 second response gate.
 7. `wait_for_founder_readiness_photo` — pause the room for a judge-requested photo retake.
-8. `wait_for_judge_rescue` — hold an eliminated judge for the founder’s ten-second appeal.
+8. `wait_for_judge_rescue` — hold an eliminated judge for the founder’s twenty-second appeal.
 9. `post_judge_round` — run an optional four-judge montage without opening response gates.
 10. `post_bid_round` — place one or more offers on the founder’s deal table.
 11. `wait_for_founder_offer_decision` — wait while the founder accepts, counters, or rejects.

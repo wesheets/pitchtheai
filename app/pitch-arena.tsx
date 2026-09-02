@@ -51,7 +51,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { requestPitchAgent } from '@/lib/agent-handoff';
+import {
+  requestPitchAgent,
+  requestPitchAgentWarmup,
+} from '@/lib/agent-handoff';
 import {
   getVoiceProvider,
   speakJudge,
@@ -222,6 +225,7 @@ type PitchState = {
   amountRaised?: number;
   durationSeconds?: number;
   startedAt?: number;
+  endReason?: 'verdict' | 'timeout';
 };
 export type PitchDetailsUpdate = {
   founderName?: string;
@@ -699,8 +703,9 @@ export function PitchArena() {
   const [cameraMode, setCameraMode] = useState<'photo' | 'live' | null>(null);
   const [cameraMessage, setCameraMessage] = useState('');
   const [publishFounderPhoto, setPublishFounderPhoto] = useState(false);
+  const [lobbyStep, setLobbyStep] = useState<'connect' | 'pitch'>('connect');
   const [handoffStatus, setHandoffStatus] = useState<
-    'idle' | 'requesting' | 'waiting' | 'connected' | 'error'
+    'idle' | 'requesting' | 'warming' | 'waiting' | 'connected' | 'error'
   >('idle');
   const [handoffMessage, setHandoffMessage] = useState('');
   const pitchRef = useRef(pitch);
@@ -751,6 +756,7 @@ export function PitchArena() {
   const toolEventsRef = useRef<ArenaToolEvent[]>([]);
   const publishFounderPhotoRef = useRef(false);
   const twoMinuteWarningRef = useRef(false);
+  const timeExpiredRef = useRef(false);
   const voiceAbortRef = useRef<AbortController | null>(null);
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
@@ -870,6 +876,7 @@ export function PitchArena() {
         draftRef.current = queued.openingPitch;
         setPitch(restoredPitch);
         setDraft(queued.openingPitch);
+        setLobbyStep('pitch');
         setHandoffStatus('waiting');
         setHandoffMessage(queued.handoffMessage);
       }
@@ -1379,6 +1386,7 @@ export function PitchArena() {
       appealedJudgeIdsRef.current.clear();
       setResponseSecondsLeft(responseWindow(nextPitch.difficulty));
       twoMinuteWarningRef.current = false;
+      timeExpiredRef.current = false;
       setHandoffStatus('connected');
       setHandoffMessage('Agent connected. Entering the room…');
       stopVoices();
@@ -1395,6 +1403,33 @@ export function PitchArena() {
     },
     [stopVoices],
   );
+  const warmUpAgent = useCallback(async () => {
+    if (!roomReady || !validRoomCode(roomCode)) {
+      setHandoffStatus('error');
+      setHandoffMessage('The room is still initializing. Try again.');
+      return;
+    }
+    setHandoffStatus('requesting');
+    setHandoffMessage('Preparing your AI connection prompt…');
+    try {
+      await requestPitchAgentWarmup({
+        roomCode,
+        roomUrl: window.location.href,
+      });
+      setLobbyStep('pitch');
+      setHandoffStatus('warming');
+      setHandoffMessage(
+        'Connection prompt copied. Paste and send it to Codex or your browser AI, then fill out your pitch while it attaches.',
+      );
+    } catch (error) {
+      setHandoffStatus('error');
+      setHandoffMessage(
+        error instanceof Error
+          ? error.message
+          : 'The connection prompt could not be copied.',
+      );
+    }
+  }, [roomCode, roomReady]);
   const requestAgent = useCallback(async () => {
     if (!roomReady || !validRoomCode(roomCode)) {
       setHandoffStatus('error');
@@ -1439,7 +1474,7 @@ export function PitchArena() {
       });
       if (pitchRef.current.status === 'live') return;
       const waitingMessage =
-        'Panel prompt copied. Paste and send it to your browser agent; the clock starts when it joins.';
+        'Fast-start prompt copied. Paste and send it once—your agent is authorized to enter immediately without a second confirmation.';
       writeQueuedPitchSession({
         version: 1,
         roomCode,
@@ -1491,6 +1526,9 @@ export function PitchArena() {
     setCounterEquity('');
     setCounterNote('');
     setDraft('');
+    setLobbyStep('connect');
+    setHandoffStatus('idle');
+    setHandoffMessage('');
     setPublishFounderPhoto(false);
     toolEventsRef.current = [];
     setToolEvents([]);
@@ -1516,6 +1554,7 @@ export function PitchArena() {
     setEvidenceReviews({});
     answerQualityRef.current = { ...EMPTY_ANSWER_QUALITY };
     twoMinuteWarningRef.current = false;
+    timeExpiredRef.current = false;
     soundtrackStopRef.current?.();
     soundtrackStopRef.current = null;
     heartbeatStopRef.current?.();
@@ -2363,6 +2402,7 @@ export function PitchArena() {
       summary: string;
       amountRaised: number;
       winningJudgeId?: JudgeId;
+      endReason?: 'verdict' | 'timeout';
     }) => {
       const snapshot = pitchRef.current;
       const quality = answerQualityRef.current;
@@ -2396,7 +2436,9 @@ export function PitchArena() {
           Math.round((Date.now() - (snapshot.startedAt ?? Date.now())) / 1000) -
             pauseSeconds,
         ),
+        endReason: result.endReason ?? 'verdict',
       };
+      pitchRef.current = finalPitch;
       setPitch(finalPitch);
       try {
         const founderPhotoMaterialId = publishFounderPhotoRef.current
@@ -2435,13 +2477,117 @@ export function PitchArena() {
       } catch {
         // The local game remains playable when persistence is offline.
       }
-      speak([
-        { judgeId: result.winningJudgeId ?? 'maya', text: result.summary },
-      ]);
+      if (result.endReason !== 'timeout') {
+        speak([
+          { judgeId: result.winningJudgeId ?? 'maya', text: result.summary },
+        ]);
+      }
       return finalPitch;
     },
     [fetchLeaderboard, speak],
   );
+
+  const expirePitch = useCallback(async () => {
+    if (
+      timeExpiredRef.current ||
+      pitchRef.current.status !== 'live' ||
+      pitchRef.current.secondsLeft > 0
+    )
+      return;
+    timeExpiredRef.current = true;
+    stopVoices();
+    setFocusedJudgeId(null);
+    setComposerOpen(false);
+
+    const timeoutReason =
+      'The twenty-minute clock expired before the panel reached a final verdict.';
+    const timedOutReactions = Object.fromEntries(
+      JUDGES.map((judge) => {
+        const current = reactionsRef.current[judge.id];
+        return [
+          judge.id,
+          current.state === 'out'
+            ? current
+            : {
+                ...current,
+                state: 'out' as const,
+                spoken: 'Time is up. The room is closed.',
+                question: undefined,
+                outReason: timeoutReason,
+              },
+        ];
+      }),
+    ) as Record<JudgeId, JudgeReaction>;
+    reactionsRef.current = timedOutReactions;
+    setReactions(timedOutReactions);
+
+    const timeoutFeed: PitchFeedEntry = {
+      id: crypto.randomUUID(),
+      kind: 'system',
+      author: 'Arena',
+      text: 'OUT OF TIME. The remaining investors have left the room.',
+      createdAt: Date.now(),
+    };
+    const nextFeed = [...feedRef.current.slice(-39), timeoutFeed];
+    feedRef.current = nextFeed;
+    setFeed(nextFeed);
+
+    const timedOutFounderTurn: FounderTurnState = {
+      ...founderTurnRef.current,
+      status: 'timed_out',
+      deadline: undefined,
+    };
+    founderTurnRef.current = timedOutFounderTurn;
+    setFounderTurn(timedOutFounderTurn);
+    if (offerDecisionRef.current.status === 'choosing') {
+      offerDecisionRef.current = { status: 'timed_out' };
+      setOfferDecision({ status: 'timed_out' });
+    }
+    if (
+      judgeRescueRef.current.status === 'offered' ||
+      judgeRescueRef.current.status === 'awaiting'
+    ) {
+      judgeRescueRef.current = {
+        ...judgeRescueRef.current,
+        status: 'timed_out',
+        deadline: undefined,
+      };
+      setJudgeRescue(judgeRescueRef.current);
+    }
+    for (const waiter of [
+      responseWaiterRef,
+      offerWaiterRef,
+      rescueWaiterRef,
+      presentationResetWaiterRef,
+    ]) {
+      if (!waiter.current) continue;
+      window.clearInterval(waiter.current.timer);
+      waiter.current.resolve({ status: 'pitch_timed_out' });
+      waiter.current = null;
+    }
+
+    const currentPitch = {
+      ...pitchRef.current,
+      secondsLeft: 0,
+      mood: 'disappointed' as const,
+      soundtrack: 'fear' as const,
+    };
+    pitchRef.current = currentPitch;
+    setPitch(currentPitch);
+    setHandoffMessage('OUT OF TIME. The room has closed.');
+    // Let the remaining investor cards visibly exit before the final receipt replaces the arena.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 1400));
+    const accepted = acceptedBidRef.current;
+    await finalizePitch({
+      score: Math.min(30, currentPitch.favorability),
+      amountRaised: accepted?.amount ?? 0,
+      winningJudgeId: accepted?.judgeId,
+      endReason: 'timeout',
+      summary: accepted
+        ? `${currentPitch.companyName} ran out of time before the panel delivered its final verdict. Every remaining investor left the room, but the founder's accepted ${money(accepted.amount)} offer from ${JUDGES.find((judge) => judge.id === accepted.judgeId)?.name ?? accepted.judgeId} remains on the record.`
+        : `${currentPitch.companyName} ran out of time before the panel delivered its final verdict. Every remaining investor left the room. No offer was accepted.`,
+    });
+  }, [finalizePitch, stopVoices]);
 
   useEffect(() => {
     if (!roomReady || !validRoomCode(roomCode)) return;
@@ -2500,6 +2646,19 @@ export function PitchArena() {
         ].slice(-200);
         toolEventsRef.current = nextEvents;
         setToolEvents(nextEvents);
+        if (
+          event.toolName === 'get_pitch_context' &&
+          event.phase === 'complete' &&
+          pitchRef.current.status === 'lobby'
+        ) {
+          setHandoffStatus((current) => {
+            if (current !== 'warming') return current;
+            setHandoffMessage(
+              `AI connected to room ${roomCode}. Finish setup, then send FAST START.`,
+            );
+            return 'connected';
+          });
+        }
       },
     });
     return unregister;
@@ -2537,6 +2696,11 @@ export function PitchArena() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [pauseState.status, pitch.status, presentationReset.status]);
+
+  useEffect(() => {
+    if (pitch.status !== 'live' || pitch.secondsLeft > 0) return;
+    void expirePitch();
+  }, [expirePitch, pitch.secondsLeft, pitch.status]);
 
   useEffect(() => {
     if (pauseState.status !== 'paused' || !pauseState.pausedAt) return;
@@ -4208,13 +4372,72 @@ export function PitchArena() {
                 )}
               </div>
               {pitch.status === 'lobby' ? (
+                lobbyStep === 'connect' ? (
+                  <section className="ai-connect-step" aria-labelledby="connect-ai-title">
+                    <header>
+                      <div>
+                        <span>Step 1 of 2 · Connect your AI</span>
+                        <h2 id="connect-ai-title">Invite your AI before you build the pitch.</h2>
+                      </div>
+                      <b>Recommended for Codex</b>
+                    </header>
+                    <div className="ai-connect-grid">
+                      <ol>
+                        <li>
+                          <strong>Copy the connection prompt</strong>
+                          <span>It contains this room code and performs a read-only attachment check.</span>
+                        </li>
+                        <li>
+                          <strong>Paste and send it to Codex or your browser AI</strong>
+                          <span>Keep this Pitch The AI tab open. Your AI will confirm when it is attached.</span>
+                        </li>
+                        <li>
+                          <strong>Fill out your pitch while the AI warms up</strong>
+                          <span>You will send one short FAST START message when your setup is complete.</span>
+                        </li>
+                      </ol>
+                      <div className="ai-connect-actions">
+                        <Button
+                          className="enter-room-button"
+                          onClick={() => void warmUpAgent()}
+                          disabled={handoffStatus === 'requesting' || !roomReady}
+                        >
+                          {handoffStatus === 'requesting'
+                            ? 'Preparing connection…'
+                            : 'Copy AI connection prompt'}{' '}
+                          <ArrowUpRight data-icon="inline-end" />
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLobbyStep('pitch');
+                            setHandoffStatus('idle');
+                            setHandoffMessage(
+                              'You can still connect your AI with the final FAST START prompt.',
+                            );
+                          }}
+                        >
+                          Skip and set up my pitch
+                        </button>
+                        <small>
+                          This first prompt cannot start the clock or send founder information.
+                        </small>
+                      </div>
+                    </div>
+                  </section>
+                ) : (
                 <div className="opening-pitch-form">
                   <header className="game-setup-intro">
                     <div>
-                      <span>Game board setup</span>
+                      <span>Step 2 of 2 · Game board setup</span>
                       <h2>Set the terms. Make your case.</h2>
                     </div>
-                    <small>Every field below is editable</small>
+                    <button
+                      type="button"
+                      onClick={() => setLobbyStep('connect')}
+                    >
+                      AI connection instructions
+                    </button>
                   </header>
                   <div className="game-setup-fields">
                     <label
@@ -4386,7 +4609,9 @@ export function PitchArena() {
                     >
                       {handoffStatus === 'requesting'
                         ? 'Preparing the room…'
-                        : 'Enter room with your AI'}{' '}
+                        : handoffStatus === 'connected'
+                          ? 'AI connected — send FAST START'
+                          : 'Enter room with your AI'}{' '}
                       <ArrowUpRight data-icon="inline-end" />
                     </Button>
                     <div className="opening-handoff-note">
@@ -4398,6 +4623,7 @@ export function PitchArena() {
                     </div>
                   </div>
                 </div>
+                )
               ) : pitch.status === 'final' ? (
                 <div className="arena-final-summary">
                   <div className="arena-final-score">
@@ -4408,7 +4634,11 @@ export function PitchArena() {
                   <div className="arena-final-copy">
                     <p>THE ROOM&apos;S VERDICT</p>
                     <h2>
-                      {pitch.amountRaised ? 'You got a deal.' : 'No deal.'}
+                      {pitch.endReason === 'timeout'
+                        ? 'OUT OF TIME'
+                        : pitch.amountRaised
+                          ? 'You got a deal.'
+                          : 'No deal.'}
                     </h2>
                     <blockquote>{pitch.summary}</blockquote>
                     <div>

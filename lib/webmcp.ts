@@ -44,6 +44,7 @@ type PitchSnapshot = {
     durationSeconds?: number;
     startedAt?: number;
     difficulty: PitchDifficulty;
+    endReason?: 'verdict' | 'timeout';
   };
   judges: Array<{
     id: JudgeId;
@@ -92,7 +93,11 @@ type RegisterToolArgs = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+  };
   execute: (args: Record<string, unknown>) => unknown;
 };
 
@@ -119,6 +124,7 @@ type PitchToolOptions = {
     summary: string;
     amountRaised: number;
     winningJudgeId?: JudgeId;
+    endReason?: 'verdict' | 'timeout';
   }) => Promise<PitchSnapshot['pitch']>;
   fetchLeaderboard: () => Promise<LeaderboardEntry[]>;
   onStatus: (status: ToolStatus) => void;
@@ -268,8 +274,23 @@ export function registerPitchTools(options: PitchToolOptions) {
           createdAt: Date.now(),
         });
         try {
+          const currentSnapshot = optionsRef.current.getSnapshot();
           if (
-            optionsRef.current.getSnapshot().pauseState.status === 'paused' &&
+            (currentSnapshot.pitch.status === 'final' ||
+              (currentSnapshot.pitch.status === 'live' &&
+                currentSnapshot.pitch.secondsLeft <= 0)) &&
+            tool.name !== 'get_pitch_context' &&
+            tool.name !== 'get_leaderboard'
+          ) {
+            throw new Error(
+              currentSnapshot.pitch.endReason === 'timeout' ||
+                currentSnapshot.pitch.secondsLeft <= 0
+                ? 'OUT OF TIME. The room is closed and every remaining investor has left. No more pitch actions are allowed.'
+                : 'The room already has a final verdict. No more pitch actions are allowed.',
+            );
+          }
+          if (
+            currentSnapshot.pauseState.status === 'paused' &&
             tool.name !== 'get_pitch_context' &&
             tool.name !== 'get_leaderboard'
           ) {
@@ -383,11 +404,17 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'start_pitch',
       description:
-        'Start or replace the visible Pitch The AI session in the room already verified through get_pitch_context. Use when the founder gives a company name and ask. Equity may be 0 for a prize or non-equity contest ask. Set difficulty to easy, medium, hard, or legendary; it controls response time, pressure, scoring severity, rescue tolerance, and bid standards. This resets prior rounds, secretly varies judge patience, runs the visible 3-2-1 launch, then starts the twenty-minute clock.',
+        'Fast-start the visible Pitch The AI lobby. The required roomCode is checked before any state changes, so this may be the first tool call from the room-bound handoff prompt. On success it secretly varies judge patience, runs the visible 3-2-1 launch, starts the twenty-minute clock, and returns the full room context. Repeating the same start request for an already-live room safely returns its current context instead of restarting it. Equity may be 0 for a prize or non-equity contest ask. Difficulty controls response time, pressure, scoring severity, rescue tolerance, and bid standards.',
       inputSchema: {
         type: 'object',
-        required: ['companyName', 'askAmount', 'equity'],
+        required: ['roomCode', 'companyName', 'askAmount', 'equity'],
         properties: {
+          roomCode: {
+            type: 'string',
+            pattern: '^[A-F0-9]{6}$',
+            description:
+              'Exact six-character room code from the founder handoff. The pitch will not start in a different tab.',
+          },
           founderName: { type: 'string', maxLength: 80 },
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
           agentSignature: {
@@ -413,7 +440,37 @@ export function registerPitchTools(options: PitchToolOptions) {
         },
         additionalProperties: false,
       },
+      annotations: { destructiveHint: false, idempotentHint: true },
       execute: async (args) => {
+        const requestedRoomCode = String(args.roomCode).trim().toUpperCase();
+        const currentSnapshot = optionsRef.current.getSnapshot();
+        const currentRoomCode = currentSnapshot.roomCode;
+        if (requestedRoomCode !== currentRoomCode) {
+          throw new Error(
+            `Room mismatch. This tab is ${currentRoomCode}, not ${requestedRoomCode}. No pitch state was changed. Attach the already-open Pitch The AI tab for room ${requestedRoomCode} and retry.`,
+          );
+        }
+        if (currentSnapshot.pitch.status === 'live') {
+          const samePitch =
+            currentSnapshot.pitch.companyName === String(args.companyName) &&
+            currentSnapshot.pitch.askAmount === Number(args.askAmount) &&
+            currentSnapshot.pitch.equity === Number(args.equity);
+          if (!samePitch) {
+            throw new Error(
+              `Room ${currentRoomCode} already has a different live pitch. No state was changed. Resume that room with its returned context or reset it visibly before starting another pitch.`,
+            );
+          }
+          return {
+            started: false,
+            alreadyLive: true,
+            context: currentSnapshot,
+          };
+        }
+        if (currentSnapshot.pitch.status === 'final') {
+          throw new Error(
+            `Room ${currentRoomCode} already has a final verdict. No state was changed. Reset the room visibly before starting another pitch.`,
+          );
+        }
         await optionsRef.current.startPitch({
           founderName:
             typeof args.founderName === 'string'
@@ -442,22 +499,7 @@ export function registerPitchTools(options: PitchToolOptions) {
         });
         return {
           started: true,
-          roomCode: optionsRef.current.getSnapshot().roomCode,
-          companyName: args.companyName,
-          agentSignature:
-            typeof args.agentSignature === 'string'
-              ? args.agentSignature
-              : 'Unspecified WebMCP agent',
-          pitchVenue:
-            typeof args.pitchVenue === 'string'
-              ? args.pitchVenue
-              : 'Attached WebMCP browser',
-          askAmount: args.askAmount,
-          equity: args.equity,
-          difficulty:
-            typeof args.difficulty === 'string'
-              ? args.difficulty
-              : optionsRef.current.getSnapshot().pitch.difficulty,
+          context: optionsRef.current.getSnapshot(),
         };
       },
     },
@@ -527,7 +569,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'get_pitch_context',
       description:
-        "Read this tab's unique room code, opening draft, live pitch transcript, difficulty, founder/judge dialogue, response gate, judge-rescue gate, presentation-reset gate, founder pause state, founder-camera evidence, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. Equity 0 means competition mode: judge WebMCP fit, user experience, human-agent collaboration, implementation, originality, and resilience instead of pretending it is a normal investment. Verify the room code supplied by the handoff before calling start_pitch so a duplicate browser tab cannot receive the game. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. The newest file named founder-readiness-* is the exact opt-in image shown on the founder card; older files with that prefix are prior retakes. It may inform only observable pitch-readiness feedback such as framing, lighting, eye contact, and attire preparedness. Never infer or score attractiveness, age, race, ethnicity, gender, disability, health, religion, income, identity, or other sensitive traits. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The response clock begins only when they click Respond, and any submitted answer remains available across slices. In Hard and Legendary modes, judges may challenge answers that suddenly become generic, over-polished, or inconsistent with the founder's prior voice, but must never claim to have detected AI. Ask for an immediate concrete example, calculation, personal decision, or implementation detail that the founder should know without outside help; score the substance of that follow-up, not typing style. A judge who sees an easily reversible readiness problem may set presentationReset true without a question, explicitly ask for the change, then immediately call wait_for_founder_readiness_photo in consecutive 12-second slices. The room clock pauses until the new image is captured and reviewed; the same judge must react next. Use this theatrical reset at most once per pitch, never for sensitive or immutable characteristics. If a judge goes out, immediately call wait_for_judge_rescue; the founder may appeal once and the same judge must answer it. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
+        "Read this tab's unique room code, opening draft, live pitch transcript, difficulty, founder/judge dialogue, response gate, judge-rescue gate, presentation-reset gate, founder pause state, founder-camera evidence, offer-decision gate, timer, ask, uploaded evidence links, prior offers, accepted deal, and all four judges. start_pitch performs its own required room-code check and returns this same full context, so a normal room-bound handoff should call start_pitch first instead of using this tool as a preflight. Use get_pitch_context to locate the correct tab after a room mismatch or to refresh state later. Equity 0 means competition mode: judge WebMCP fit, user experience, human-agent collaboration, implementation, originality, and resilience instead of pretending it is a normal investment. Before any judge enters, open and inspect every uploaded file, then call review_pitch_evidence with a grounded summary for each pending material. The newest file named founder-readiness-* is the exact opt-in image shown on the founder card; older files with that prefix are prior retakes. It may inform only observable pitch-readiness feedback such as framing, lighting, eye contact, and attire preparedness. Never infer or score attractiveness, age, race, ethnicity, gender, disability, health, religion, income, identity, or other sensitive traits. Run the pitch interactively: post one judge question, then call wait_for_founder_response in consecutive 12-second slices while the founder reads, clicks Respond, and answers. The response clock begins only when they click Respond, and any submitted answer remains available across slices. In Hard and Legendary modes, judges may challenge answers that suddenly become generic, over-polished, or inconsistent with the founder's prior voice, but must never claim to have detected AI. Ask for an immediate concrete example, calculation, personal decision, or implementation detail that the founder should know without outside help; score the substance of that follow-up, not typing style. A judge who sees an easily reversible readiness problem may set presentationReset true without a question, explicitly ask for the change, then immediately call wait_for_founder_readiness_photo in consecutive 12-second slices. The room clock pauses until the new image is captured and reviewed; the same judge must react next. Use this theatrical reset at most once per pitch, never for sensitive or immutable characteristics. If a judge goes out, immediately call wait_for_judge_rescue; the founder may appeal once and the same judge must answer it. After posting offers, call wait_for_founder_offer_decision the same way and honor the founder's exact choice or counter. Never invent a founder answer or choose their deal. While the pitch is live, communicate only through Pitch The AI WebMCP tools: do not narrate tool selection, repeat judge dialogue, summarize founder answers, or post routine progress updates in chat. The host may show normal tool activity. Use chat only for a tool failure, unreadable evidence, an unrecoverable founder answer, or response latency over 10 seconds. After the final verdict, provide one concise performance report.",
       inputSchema: {
         type: 'object',
         properties: {},
