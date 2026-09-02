@@ -64,7 +64,9 @@ function JudgePreview({ judge }: { judge: (typeof judges)[number] }) {
         style={{ backgroundImage: `url(${judge.portrait})` }}
       />
       <div className="landing-judge-copy">
-        <span><b>AI investor</b> · {judge.role}</span>
+        <span>
+          <b>AI investor</b> · {judge.role}
+        </span>
         <h3>{judge.name}</h3>
         <p>{judge.copy}</p>
         <small>Focus: {judge.focus}</small>
@@ -80,7 +82,11 @@ export default function Home() {
       <header className="landing-nav">
         <a className="landing-brand" href="/" aria-label="Pitch The AI home">
           <span className="landing-brand-mark" aria-hidden="true">
-            <i /><i /><i /><i /><i />
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
           </span>
           <span>
             <strong>PITCH THE AI</strong>
@@ -114,7 +120,9 @@ export default function Home() {
             </div>
           </div>
           <span className="landing-beta-badge">Beta</span>
-          <a className="landing-nav-play" href="/play">Play now</a>
+          <a className="landing-nav-play" href="/play">
+            Play now
+          </a>
         </nav>
       </header>
 
@@ -133,8 +141,8 @@ export default function Home() {
             <span>Before patience runs out.</span>
           </h1>
           <p className="landing-subtitle">
-            Pitch your idea to four AI investors. Answer tough questions.
-            Defend your vision. Win the deal—or get roasted.
+            Pitch your idea to four AI investors. Answer tough questions. Defend
+            your vision. Win the deal—or get roasted.
           </p>
           <div className="landing-actions">
             <a className="landing-primary-cta" href="/play">
@@ -146,7 +154,11 @@ export default function Home() {
           </div>
           <p className="landing-orientation">
             Built for the{' '}
-            <a href="https://openai.com/webmcp-challenge/" target="_blank" rel="noreferrer">
+            <a
+              href="https://openai.com/webmcp-challenge/"
+              target="_blank"
+              rel="noreferrer"
+            >
               WebMCP Challenge
             </a>
             . Play in ChatGPT/Codex or through the{' '}
@@ -160,14 +172,18 @@ export default function Home() {
               {judges.map((judge) => (
                 <span
                   key={judge.id}
-                  style={{
-                    backgroundImage: `url(${judge.portrait})`,
-                    '--proof-color': judge.color,
-                  } as CSSProperties}
+                  style={
+                    {
+                      backgroundImage: `url(${judge.portrait})`,
+                      '--proof-color': judge.color,
+                    } as CSSProperties
+                  }
                 />
               ))}
             </div>
-            <p>Built for founders, builders, and dreamers who want the truth.</p>
+            <p>
+              Built for founders, builders, and dreamers who want the truth.
+            </p>
           </div>
           <div className="landing-microphone" aria-hidden="true" />
         </div>
@@ -188,18 +204,41 @@ export default function Home() {
           >
             <Globe2 /> Built for the WebMCP Challenge <ArrowUpRight />
           </a>
-          <p>Your browser AI runs the panel. You control every answer and every deal.</p>
-          <a href="https://github.com/wesheets/pitchtheai" target="_blank" rel="noreferrer">
+          <p>
+            Your browser AI runs the panel. You control every answer and every
+            deal.
+          </p>
+          <a
+            href="https://github.com/wesheets/pitchtheai"
+            target="_blank"
+            rel="noreferrer"
+          >
             <CodeXml /> MIT source <ArrowUpRight />
           </a>
         </div>
         <div className="landing-stage-board">
           <div className="landing-stage-stats">
-            <span>Favorability <strong>50<small>/100</small></strong></span>
-            <span>Still in <strong>4<small>/4</small></strong></span>
-            <span>Round <strong>Seed</strong></span>
-            <span>Best offer <strong>—</strong></span>
-            <span>Room read <strong>😳 Skeptical</strong></span>
+            <span>
+              Favorability{' '}
+              <strong>
+                50<small>/100</small>
+              </strong>
+            </span>
+            <span>
+              Still in{' '}
+              <strong>
+                4<small>/4</small>
+              </strong>
+            </span>
+            <span>
+              Round <strong>Seed</strong>
+            </span>
+            <span>
+              Best offer <strong>—</strong>
+            </span>
+            <span>
+              Room read <strong>😳 Skeptical</strong>
+            </span>
           </div>
           <div className="landing-stage-content">
             <div>
@@ -207,7 +246,10 @@ export default function Home() {
               <h2>Set the terms. Make your case.</h2>
               <div className="landing-preview-note">
                 <strong>Connect your AI first.</strong>
-                <span>Then enter the arena to add your founder, venture, terms, and opening pitch.</span>
+                <span>
+                  Then enter the arena to add your founder, venture, terms, and
+                  opening pitch.
+                </span>
               </div>
               <div className="landing-difficulty-row">
                 <span>Difficulty</span>
@@ -222,20 +264,53 @@ export default function Home() {
               <span>Room tools</span>
               <small>Reset room</small>
               <small>How it works</small>
-              <div className="landing-fake-slider"><i /></div>
+              <div className="landing-fake-slider">
+                <i />
+              </div>
             </aside>
           </div>
         </div>
         <div className="landing-game-loop" aria-label="How the game works">
-          <span><b>01</b><strong>Set your pitch</strong></span>
-          <span><b>02</b><strong>Face the judges</strong></span>
-          <span><b>03</b><strong>Climb the leaderboard</strong></span>
+          <span>
+            <b>01</b>
+            <strong>Set your pitch</strong>
+          </span>
+          <span>
+            <b>02</b>
+            <strong>Face the judges</strong>
+          </span>
+          <span>
+            <b>03</b>
+            <strong>Climb the leaderboard</strong>
+          </span>
         </div>
         <div className="landing-feature-row">
-          <article><ShieldQuestion /><span><strong>Face the judges</strong>Questions adapt to every answer.</span></article>
-          <article><Gauge /><span><strong>Feel the pressure</strong>Timers, music, and patience are live.</span></article>
-          <article><Trophy /><span><strong>Earn your rank</strong>Close a deal and climb the board.</span></article>
-          <article><Users /><span><strong>Practice at any level</strong>Easy coaching to Legendary heat.</span></article>
+          <article>
+            <ShieldQuestion />
+            <span>
+              <strong>Face the judges</strong>Questions adapt to every answer.
+            </span>
+          </article>
+          <article>
+            <Gauge />
+            <span>
+              <strong>Feel the pressure</strong>Timers, music, and patience are
+              live.
+            </span>
+          </article>
+          <article>
+            <Trophy />
+            <span>
+              <strong>Earn your rank</strong>Close a deal and climb the board.
+            </span>
+          </article>
+          <article>
+            <Users />
+            <span>
+              <strong>Practice at any level</strong>Easy coaching to Legendary
+              heat.
+            </span>
+          </article>
         </div>
       </section>
 
@@ -247,15 +322,24 @@ export default function Home() {
         <div className="landing-faq-grid">
           <article>
             <h3>What do I need?</h3>
-            <p>A WebMCP-capable browser agent attached to the play page. Voice, camera, evidence uploads, and session recording are optional.</p>
+            <p>
+              A WebMCP-capable browser agent attached to the play page. Evidence
+              and founder-photo uploads are optional.
+            </p>
           </article>
           <article>
             <h3>Is the game open source?</h3>
-            <p>Yes. Pitch The AI’s application source is public under the MIT License. External beta links are clearly labeled and separate.</p>
+            <p>
+              Yes. Pitch The AI’s application source is public under the MIT
+              License. External beta links are clearly labeled and separate.
+            </p>
           </article>
           <article>
             <h3>Can the AI invent my answer?</h3>
-            <p>No. Response gates hold the panel until you answer or time out, and only you can accept, counter, or reject an offer.</p>
+            <p>
+              No. Response gates hold the panel until you answer or time out,
+              and only you can accept, counter, or reject an offer.
+            </p>
           </article>
         </div>
         <a className="landing-bottom-cta" href="/play">

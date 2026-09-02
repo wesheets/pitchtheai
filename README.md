@@ -6,19 +6,19 @@ Visit [pitchtheai.com](https://pitchtheai.com), then enter the arena at [pitchth
 
 ## The experience
 
-1. Set the founder name, venture, ask, equity, and difficulty: Easy, Medium, Hard, or Legendary.
-2. Write or dictate the complete opening pitch, optionally attach evidence, and take an opt-in founder photo.
+1. Choose Competition or Investment, then set the founder name, venture, prize or funding ask, any investment equity, and difficulty: Easy, Medium, Hard, or Legendary.
+2. Type the complete opening pitch, optionally attach evidence, and optionally upload a founder photo for presentation feedback.
 3. In Codex/ChatGPT mode, copy one generated `FAST START` prompt after setup is complete. It explicitly authorizes the submitted room data and evidence, and the first `start_pitch` call verifies the room code before changing state—there is no separate warm-up prompt or redundant confirmation turn.
 4. In an optional compatible multi-agent host, assign four already-configured agents to the four judge seats. The host authorizes the panel once, routes each turn to the exact selected agent, and every new seat begins by reading the shared WebMCP room history.
 5. One investor takes the floor at a time. Their card moves center stage with the question while the other judges remain visible.
-6. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to answer by voice or text. The countdown grows and pulses while a heartbeat layers over the room music.
+6. The founder clicks **Respond**, then has 45–90 seconds depending on difficulty to type an answer. The countdown grows and pulses while a heartbeat layers over the room music.
 7. The agent evaluates the exact answer and any inspected evidence before the next investor speaks.
 8. Judges can laugh, become exasperated, demand a presentation reset, or leave with a specific reason. A one-use **Wait, don’t go!** lifeline gives the founder twenty seconds to rescue an eliminated judge.
 9. Interested judges can make visible bids and compete. The founder—not the agent—accepts, counters, or rejects each offer.
 10. Refreshing the tab restores the exact live room. A separate one-use founder pause freezes the room, costs the least-interested investor, and records the pause duration on the public result.
 11. A verdict closes the room normally. If the twenty-minute clock reaches zero first, the arena declares **OUT OF TIME**, dismisses every remaining investor, closes all response gates, and records a timeout result.
 
-Equity set to zero activates competition mode, which judges the WebMCP experience, implementation, originality, resilience, and human–agent collaboration instead of pretending there is a startup equity transaction.
+Competition mode is the default and records a prize ask with zero equity. It judges the WebMCP experience, implementation, originality, resilience, and human–agent collaboration instead of pretending there is a startup equity transaction. Investment mode exposes normal funding and equity terms.
 
 ## Why WebMCP
 
@@ -26,7 +26,7 @@ This is more than an AI chat displayed beside a webpage. WebMCP lets the visitin
 
 - The agent controls the four investor personas, timing gates, reactions, offers, exits, rescues, and final verdict.
 - The site owns the durable room state, transcript, timer, evidence status, audiovisual cues, negotiation controls, and leaderboard.
-- The founder owns every spoken or typed answer, optional camera evidence, rescue appeal, counteroffer, and deal decision.
+- The founder owns every typed answer, optional uploaded photo, rescue appeal, counteroffer, and deal decision.
 - Tool-enforced response and evidence gates prevent the agent from inventing a founder answer, skipping an upload, or accepting its own offer.
 
 The result is a live performance that neither the human nor the AI could create alone.
@@ -52,16 +52,14 @@ The page registers fourteen narrow tools with `document.modelContext.registerToo
 
 The arena still renders in an ordinary browser, but a WebMCP-capable agent is required to run the panel.
 
-## Voice, evidence, and recording
+## Judge voices and evidence
 
-- Browser speech recognition captures founder responses when supported; typing is always available.
 - Server-side ElevenLabs streaming gives each judge a distinct voice without exposing the API key.
 - Browser speech synthesis automatically takes over when streamed voices are unavailable or the daily character budget is reached.
 - Each judge has skeptical, intrigued, impressed, laughing, exasperated, and exit presentation states.
 - The soundtrack reacts to the room, with separate countdown, heartbeat, tension, fear, excitement, and triumph cues.
 - JPG, PNG, WebP, PDF, text, Markdown, and PPTX evidence can be attached. Files are stored in R2 and exposed to the agent as inspectable links.
-- The camera is opt-in. A captured still becomes evidence only after the founder submits it.
-- Optional session recording downloads locally as WebM with the arena, founder picture-in-picture, microphone, and available game audio. Recording is not uploaded by default.
+- Founder photos are opt-in uploads. They become judge evidence only after the founder submits them.
 
 ## Scoring and leaderboard
 
@@ -75,9 +73,8 @@ write to another product's database.
 - The leaderboard stores the founder and venture names, agent signature, pitch
   venue, score, terms, difficulty, lifeline use, active duration, pause duration,
   opening pitch, transcript, verdict, and WebMCP tool-call receipt.
-- An opt-in founder photo may be linked to the public pitch record. Camera video,
-  microphone audio, and session recordings are not uploaded with leaderboard
-  entries.
+- An opt-in founder photo may be linked to the public pitch record. The play page
+  does not request camera, microphone, or screen-recording access.
 - **Share result** creates a branded final-verdict image in the browser. It is
   shared or downloaded locally and is not stored by the site.
 - Uploaded pitch evidence uses the Pitch The AI project bucket and is separate

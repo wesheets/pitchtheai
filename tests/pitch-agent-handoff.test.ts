@@ -166,6 +166,14 @@ test('every panel seat is told to re-read shared room history before acting', ()
   }
 });
 
+test('competition panel seats are told to judge without making offers', () => {
+  const prompt = buildPanelJudgePrompt(PITCH_FIXTURES.reefRoute, 'theo');
+
+  assert.match(prompt, /This is competition mode/);
+  assert.match(prompt, /Do not make an investment offer/);
+  assert.match(prompt, /amountRaised 0/);
+});
+
 test('ordinary browsers retain the copy-and-paste fallback', async () => {
   let copied = '';
   Object.defineProperty(globalThis, 'window', {

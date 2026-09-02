@@ -1778,7 +1778,7 @@ textarea {
   transform: translateX(-50%);
   filter: drop-shadow(0 24px 30px #000)
     drop-shadow(0 0 20px rgb(255 178 42 / 0.18));
-  cursor: pointer;
+  pointer-events: none;
 }
 .stage-microphone img {
   display: block;
@@ -1800,18 +1800,6 @@ textarea {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.17em;
-}
-.stage-microphone:hover img {
-  transform: translateY(-4px) scale(1.025);
-  filter: brightness(1.18);
-}
-.stage-microphone-live img {
-  filter: brightness(1.2) drop-shadow(0 0 24px #ffc857);
-  animation: mic-float 0.85s ease-in-out infinite alternate;
-}
-.stage-microphone-live span {
-  color: #050505;
-  background: #ffc857;
 }
 .room-control-deck {
   position: relative;
@@ -3121,6 +3109,59 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.55rem;
 }
+.pitch-purpose-selector {
+  display: flex;
+  width: fit-content;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 10px;
+  padding: 0;
+  background: rgb(0 0 0 / 0.26);
+}
+.pitch-purpose-selector button {
+  display: inline-flex;
+  min-width: 205px;
+  align-items: center;
+  gap: 0.55rem;
+  border: 0;
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+  padding: 0.42rem 0.7rem;
+  color: rgb(255 255 255 / 0.48);
+  background: transparent;
+  text-align: left;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+}
+.pitch-purpose-selector button:last-child {
+  border-right: 0;
+}
+.pitch-purpose-selector button[data-active='true'] {
+  color: #ffc857;
+  background: rgb(255 195 72 / 0.1);
+}
+.pitch-purpose-selector button:hover {
+  color: #fff;
+}
+.pitch-purpose-selector svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.pitch-purpose-selector span,
+.pitch-purpose-selector strong,
+.pitch-purpose-selector small {
+  display: block;
+}
+.pitch-purpose-selector strong {
+  font-size: 10px;
+}
+.pitch-purpose-selector small {
+  margin-top: 0.08rem;
+  color: rgb(255 255 255 / 0.34);
+  font-size: 8px;
+}
 .game-setup-field {
   display: grid;
   min-width: 0;
@@ -3184,6 +3225,16 @@ textarea {
 .game-setup-field > input::placeholder {
   color: rgb(255 255 255 / 0.32) !important;
   opacity: 1;
+}
+.game-setup-mode-lock {
+  cursor: default;
+}
+.game-setup-mode-lock > strong {
+  align-self: center;
+  padding-top: 0.3rem;
+  color: #fff;
+  font-size: clamp(13px, 1vw, 16px);
+  font-weight: 650;
 }
 .game-options-grid {
   display: grid;
@@ -5365,6 +5416,13 @@ textarea {
   }
   .game-setup-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pitch-purpose-selector {
+    width: 100%;
+  }
+  .pitch-purpose-selector button {
+    min-width: 0;
+    flex: 1;
   }
   .panel-agent-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

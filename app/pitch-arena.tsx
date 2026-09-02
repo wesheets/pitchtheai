@@ -6,11 +6,8 @@ import {
   ArrowUpRight,
   AudioLines,
   Building2,
-  Camera,
-  CameraOff,
   ChevronDown,
   Clock3,
-  CircleStop,
   CircleDollarSign,
   Bug,
   Download,
@@ -18,8 +15,6 @@ import {
   Image as ImageIcon,
   LoaderCircle,
   LifeBuoy,
-  Mic,
-  MicOff,
   Music2,
   Paperclip,
   Pause,
@@ -32,7 +27,6 @@ import {
   TriangleAlert,
   Trophy,
   UserRound,
-  Video,
   Volume2,
   VolumeX,
   X,
@@ -654,7 +648,6 @@ export function PitchArena() {
   const [counterEquity, setCounterEquity] = useState('');
   const [counterNote, setCounterNote] = useState('');
   const [draft, setDraft] = useState('');
-  const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>('checking');
   const [speakingJudge, setSpeakingJudge] = useState<JudgeId | null>(null);
@@ -703,11 +696,6 @@ export function PitchArena() {
     'activity' | 'transcript' | 'report' | null
   >(null);
   const [issueDraft, setIssueDraft] = useState('');
-  const [recordingSession, setRecordingSession] = useState(false);
-  const [cameraStatus, setCameraStatus] = useState<
-    'off' | 'requesting' | 'live' | 'error'
-  >('off');
-  const [cameraMode, setCameraMode] = useState<'photo' | 'live' | null>(null);
   const [cameraMessage, setCameraMessage] = useState('');
   const [publishFounderPhoto, setPublishFounderPhoto] = useState(false);
   const [agentMode, setAgentMode] = useState<'codex' | 'bringmyai'>('codex');
@@ -772,7 +760,6 @@ export function PitchArena() {
     typeof window === 'undefined' ? '' : crypto.randomUUID(),
   );
   const launchTokenRef = useRef(0);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const soundtrackStopRef = useRef<(() => void) | null>(null);
   const heartbeatStopRef = useRef<(() => void) | null>(null);
@@ -784,14 +771,6 @@ export function PitchArena() {
   const activeVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceProviderRef = useRef<VoiceProvider>('checking');
   const responseInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingStreamRef = useRef<MediaStream | null>(null);
-  const displayRecordingStreamRef = useRef<MediaStream | null>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
-  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
-  const recordingDrawTimerRef = useRef<number | null>(null);
-  const recordingAudioContextRef = useRef<AudioContext | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
 
   const loadPanelAgents = useCallback(async () => {
     const available = hasBringMyAiPanelHost();
@@ -1083,37 +1062,6 @@ export function PitchArena() {
       window.speechSynthesis?.cancel();
     };
   }, []);
-
-  useEffect(() => {
-    const video = cameraVideoRef.current;
-    const stream = cameraStreamRef.current;
-    if (cameraStatus !== 'live' || !video || !stream) return;
-    video.srcObject = stream;
-    const handleReady = () => {
-      setCameraMessage(
-        cameraMode === 'photo'
-          ? 'Camera preview ready. Capture a still when you are ready.'
-          : 'Founder video is live in the lower-left corner.',
-      );
-    };
-    video.addEventListener('loadeddata', handleReady, { once: true });
-    void video.play().catch(() => {
-      setCameraMessage(
-        'Camera permission opened, but this browser could not display the preview. Use Upload instead or open the game in Chrome.',
-      );
-    });
-    const previewTimer = window.setTimeout(() => {
-      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        setCameraMessage(
-          'Camera permission opened, but no preview arrived. Use Upload instead or open the game in Chrome.',
-        );
-      }
-    }, 4_000);
-    return () => {
-      window.clearTimeout(previewTimer);
-      video.removeEventListener('loadeddata', handleReady);
-    };
-  }, [cameraMode, cameraStatus]);
 
   const enableMusic = useCallback(async () => {
     const AudioContextClass = window.AudioContext;
@@ -3153,164 +3101,6 @@ export function PitchArena() {
     toolEvents,
   ]);
 
-  const startFounderCamera = useCallback(
-    async (mode: 'photo' | 'live' = 'photo', includeAudio = false) => {
-      const currentStream = cameraStreamRef.current;
-      if (currentStream?.active) {
-        if (includeAudio && !currentStream.getAudioTracks().length) {
-          try {
-            const microphone = await navigator.mediaDevices.getUserMedia({
-              video: false,
-              audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              },
-            });
-            microphone
-              .getAudioTracks()
-              .forEach((track) => currentStream.addTrack(track));
-          } catch {
-            setCameraMessage(
-              'Founder camera is live. Microphone access was unavailable, so recording will use available audio only.',
-            );
-          }
-        }
-        setCameraMode(mode);
-        setCameraStatus('live');
-        return currentStream;
-      }
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraMode(null);
-        setCameraStatus('error');
-        setCameraMessage('This browser does not support a founder camera.');
-        return null;
-      }
-      setCameraMode(mode);
-      setCameraStatus('requesting');
-      setCameraMessage(
-        includeAudio
-          ? 'Waiting for camera and microphone permission…'
-          : 'Waiting for camera permission…',
-      );
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: includeAudio
-            ? {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              }
-            : false,
-        });
-        cameraStreamRef.current = stream;
-        stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-          cameraStreamRef.current = null;
-          setCameraMode(null);
-          setCameraStatus('off');
-          setCameraMessage('Founder camera stopped.');
-        });
-        setCameraStatus('live');
-        setCameraMessage(
-          mode === 'photo'
-            ? 'Opening the photo preview…'
-            : 'Opening founder video in the lower-left corner…',
-        );
-        return stream;
-      } catch {
-        setCameraMode(null);
-        setCameraStatus('error');
-        setCameraMessage(
-          'Camera permission was declined or unavailable. Use Upload instead or try Chrome.',
-        );
-        return null;
-      }
-    },
-    [],
-  );
-
-  const beginPresentationRetake = useCallback(async () => {
-    const stream = await startFounderCamera('photo');
-    if (!stream) return;
-    setFocusedJudgeId(null);
-    window.setTimeout(() => {
-      document
-        .querySelector<HTMLElement>('.founder-camera-slot')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 0);
-  }, [startFounderCamera]);
-
-  const stopFounderCamera = useCallback(() => {
-    if (recordingSession) return;
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-    cameraStreamRef.current = null;
-    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
-    setCameraMode(null);
-    setCameraStatus('off');
-    setCameraMessage('Founder camera is off.');
-  }, [recordingSession]);
-
-  const captureFounderPhoto = useCallback(async () => {
-    const video = cameraVideoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight) {
-      setCameraMessage('Camera is still warming up. Try the capture again.');
-      return;
-    }
-    const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / video.videoWidth);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(video.videoWidth * scale);
-    canvas.height = Math.round(video.videoHeight * scale);
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.translate(canvas.width, 0);
-    context.scale(-1, 1);
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.9),
-    );
-    if (!blob) {
-      setCameraMessage('The readiness photo could not be captured.');
-      return;
-    }
-    const file = new File([blob], `founder-readiness-${Date.now()}.jpg`, {
-      type: 'image/jpeg',
-    });
-    const uploaded = await uploadMaterials([file]);
-    if (!uploaded?.length) {
-      setCameraMessage(
-        'Photo captured, but it could not be added for the judges. Try again.',
-      );
-      return;
-    }
-    const activePresentationReset = presentationResetRef.current;
-    if (activePresentationReset.status === 'awaiting') {
-      const capturedReset: PresentationResetState = {
-        ...activePresentationReset,
-        status: 'captured',
-        materialId: uploaded[uploaded.length - 1].id,
-      };
-      presentationResetRef.current = capturedReset;
-      setPresentationReset(capturedReset);
-    }
-    if (!recordingSession) {
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-      cameraStreamRef.current = null;
-      setCameraMode(null);
-      setCameraStatus('off');
-    }
-    setCameraMessage(
-      activePresentationReset.status === 'awaiting'
-        ? 'Retake submitted. The judge is reviewing it; the room clock remains paused.'
-        : 'Readiness photo added as evidence. Judges can review presentation setup.',
-    );
-  }, [recordingSession, uploadMaterials]);
-
   const uploadFounderPhoto = useCallback(
     async (files: FileList | null) => {
       const source = files?.[0];
@@ -3348,189 +3138,6 @@ export function PitchArena() {
     [uploadMaterials],
   );
 
-  const stopSessionRecording = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    if (recordingDrawTimerRef.current !== null) {
-      window.clearInterval(recordingDrawTimerRef.current);
-      recordingDrawTimerRef.current = null;
-    }
-    displayRecordingStreamRef.current
-      ?.getTracks()
-      .forEach((track) => track.stop());
-    displayRecordingStreamRef.current = null;
-    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
-    recordingStreamRef.current = null;
-    if (recordingAudioContextRef.current) {
-      void recordingAudioContextRef.current.close();
-      recordingAudioContextRef.current = null;
-    }
-    setRecordingSession(false);
-  }, []);
-
-  const startSessionRecording = useCallback(async () => {
-    if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
-      setHandoffMessage('This browser does not support session recording.');
-      return;
-    }
-    try {
-      const founderStream = await startFounderCamera('live', true);
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30 },
-        audio: true,
-      });
-      displayRecordingStreamRef.current = displayStream;
-      const screenVideo = document.createElement('video');
-      screenVideo.srcObject = displayStream;
-      screenVideo.muted = true;
-      screenVideo.playsInline = true;
-      await screenVideo.play();
-
-      const founderVideo = document.createElement('video');
-      if (founderStream) {
-        founderVideo.srcObject = founderStream;
-        founderVideo.muted = true;
-        founderVideo.playsInline = true;
-        await founderVideo.play();
-      }
-
-      const settings = displayStream.getVideoTracks()[0]?.getSettings();
-      const sourceWidth = Math.max(
-        1,
-        settings?.width || screenVideo.videoWidth || 1920,
-      );
-      const sourceHeight = Math.max(
-        1,
-        settings?.height || screenVideo.videoHeight || 1080,
-      );
-      const scale = Math.min(1, 1920 / sourceWidth);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1280, Math.round(sourceWidth * scale));
-      canvas.height = Math.round(canvas.width * (sourceHeight / sourceWidth));
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Recording canvas unavailable');
-
-      const drawFrame = () => {
-        context.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-        if (founderStream && founderVideo.videoWidth) {
-          const pipWidth = Math.round(canvas.width * 0.24);
-          const pipHeight = Math.round(
-            pipWidth * (founderVideo.videoHeight / founderVideo.videoWidth),
-          );
-          const margin = Math.round(canvas.width * 0.018);
-          const x = margin;
-          const y = canvas.height - pipHeight - margin;
-          context.save();
-          context.fillStyle = 'rgba(0,0,0,.82)';
-          context.fillRect(x - 7, y - 28, pipWidth + 14, pipHeight + 35);
-          context.strokeStyle = '#ffc857';
-          context.lineWidth = Math.max(3, Math.round(canvas.width / 640));
-          context.strokeRect(x - 3, y - 3, pipWidth + 6, pipHeight + 6);
-          context.translate(x + pipWidth, y);
-          context.scale(-1, 1);
-          context.drawImage(founderVideo, 0, 0, pipWidth, pipHeight);
-          context.restore();
-          context.fillStyle = '#ffc857';
-          context.font = `700 ${Math.max(13, Math.round(canvas.width / 105))}px sans-serif`;
-          context.fillText('FOUNDER CAM', x, y - 9);
-        }
-      };
-      drawFrame();
-      recordingDrawTimerRef.current = window.setInterval(drawFrame, 1000 / 30);
-
-      const canvasStream = canvas.captureStream(30);
-      const outputTracks = [...canvasStream.getVideoTracks()];
-      const streamsWithAudio = [displayStream, founderStream].filter(
-        (stream): stream is MediaStream =>
-          Boolean(stream?.getAudioTracks().length),
-      );
-      if (streamsWithAudio.length) {
-        const mixContext = new AudioContext();
-        await mixContext.resume();
-        const destination = mixContext.createMediaStreamDestination();
-        streamsWithAudio.forEach((stream) => {
-          mixContext.createMediaStreamSource(stream).connect(destination);
-        });
-        recordingAudioContextRef.current = mixContext;
-        outputTracks.push(...destination.stream.getAudioTracks());
-      }
-      const stream = new MediaStream(outputTracks);
-      const preferredMime = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-      ].find((mime) => MediaRecorder.isTypeSupported(mime));
-      const recorder = new MediaRecorder(stream, {
-        ...(preferredMime ? { mimeType: preferredMime } : {}),
-        videoBitsPerSecond: 1_500_000,
-        audioBitsPerSecond: 96_000,
-      });
-      recordingChunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size) recordingChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordingChunksRef.current, {
-          type: recorder.mimeType || 'video/webm',
-        });
-        recordingChunksRef.current = [];
-        if (blob.size) {
-          const href = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = href;
-          link.download = `${pitchRef.current.companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pitch'}-session.webm`;
-          link.click();
-          window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
-        }
-        mediaRecorderRef.current = null;
-        setRecordingSession(false);
-      };
-      stream.getTracks().forEach((track) => {
-        track.addEventListener('ended', () => {
-          if (recorder.state !== 'inactive') recorder.stop();
-        });
-      });
-      displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        stopSessionRecording();
-      });
-      recordingStreamRef.current = stream;
-      mediaRecorderRef.current = recorder;
-      recorder.start(1_000);
-      setRecordingSession(true);
-      setCameraMessage(
-        founderStream
-          ? 'Recording the arena with founder camera and microphone.'
-          : 'Recording the arena without camera because camera access is unavailable.',
-      );
-    } catch {
-      displayRecordingStreamRef.current
-        ?.getTracks()
-        .forEach((track) => track.stop());
-      displayRecordingStreamRef.current = null;
-      setHandoffMessage('Recording was cancelled or could not start.');
-    }
-  }, [startFounderCamera, stopSessionRecording]);
-
-  useEffect(
-    () => () => {
-      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
-      displayRecordingStreamRef.current
-        ?.getTracks()
-        .forEach((track) => track.stop());
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-      if (recordingDrawTimerRef.current !== null)
-        window.clearInterval(recordingDrawTimerRef.current);
-      if (recordingAudioContextRef.current)
-        void recordingAudioContextRef.current.close();
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== 'inactive'
-      )
-        mediaRecorderRef.current.stop();
-    },
-    [],
-  );
-
   const removeMaterial = useCallback(async (id: string) => {
     const response = await fetch('/api/materials', {
       method: 'DELETE',
@@ -3546,69 +3153,6 @@ export function PitchArena() {
       });
     }
   }, []);
-
-  const toggleListening = useCallback(() => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      setListening(false);
-      return;
-    }
-    void enableMusic();
-    type Recognition = {
-      continuous: boolean;
-      interimResults: boolean;
-      lang: string;
-      start: () => void;
-      stop: () => void;
-      onresult: (event: {
-        results: ArrayLike<{ 0: { transcript: string } }>;
-      }) => void;
-      onend: () => void;
-      onerror: () => void;
-    };
-    const voiceWindow = window as typeof window & {
-      SpeechRecognition?: new () => Recognition;
-      webkitSpeechRecognition?: new () => Recognition;
-    };
-    const SpeechRecognition =
-      voiceWindow.SpeechRecognition ?? voiceWindow.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setDraft(
-        'Voice transcription is not available in this browser. Type the pitch here instead.',
-      );
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    let recognitionFailed = false;
-    recognition.onresult = (event) => {
-      let text = '';
-      for (let index = 0; index < event.results.length; index += 1)
-        text += event.results[index][0].transcript;
-      draftRef.current = text.trim();
-      setDraft(draftRef.current);
-    };
-    recognition.onend = () => {
-      setListening(false);
-      if (
-        !recognitionFailed &&
-        (founderTurnRef.current.status === 'presenting' ||
-          founderTurnRef.current.status === 'awaiting') &&
-        draftRef.current.trim()
-      ) {
-        submitFounderResponse(draftRef.current);
-      }
-    };
-    recognition.onerror = () => {
-      recognitionFailed = true;
-      setListening(false);
-    };
-    recognition.start();
-    recognitionRef.current = recognition;
-    setListening(true);
-  }, [enableMusic, listening, submitFounderResponse]);
 
   const activeJudges = useMemo(
     () =>
@@ -3715,7 +3259,10 @@ export function PitchArena() {
               judgeRescue.judgeId === focusedJudge.id
                 ? beginJudgeRescue
                 : focusedPresentationReset
-                  ? () => void beginPresentationRetake()
+                  ? () =>
+                      document
+                        .getElementById('judge-reset-photo-upload')
+                        ?.click()
                   : focusedReaction.question
                     ? beginFounderResponse
                     : () => setFocusedJudgeId(null)
@@ -3728,7 +3275,7 @@ export function PitchArena() {
               : focusedPresentationReset
                 ? presentationReset.status === 'captured'
                   ? 'Photo sent · judge reviewing'
-                  : 'Make the change & retake'
+                  : 'Make the change & upload a new photo'
                 : focusedReaction.question
                   ? 'Respond'
                   : 'Back to the room'}
@@ -3739,10 +3286,10 @@ export function PitchArena() {
               <label className="judge-focus-upload">
                 <ImageIcon /> Upload a new photo
                 <input
+                  id="judge-reset-photo-upload"
                   className="sr-only"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="user"
                   onChange={(event) => {
                     void uploadFounderPhoto(event.currentTarget.files);
                     event.currentTarget.value = '';
@@ -3752,9 +3299,8 @@ export function PitchArena() {
             )}
           {focusedPresentationReset && (
             <p className="judge-focus-reset-note">
-              The pitch clock is paused. This opens the founder camera and
-              brings its capture controls into view. You may also upload a new
-              photo.
+              The pitch clock is paused. Make the requested change, then upload
+              a new photo for the judge to review.
             </p>
           )}
           {focusedReaction.state === 'out' &&
@@ -3859,16 +3405,7 @@ export function PitchArena() {
 
         <div className="founder-composer-footer">
           <div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className={`rounded-full ${listening ? 'mic-live' : 'text-white/55 hover:bg-white/10 hover:text-white'}`}
-              onClick={toggleListening}
-              aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
-            >
-              {listening ? <MicOff /> : <Mic />}
-            </Button>
-            <span>{listening ? 'Listening…' : 'Voice or type'}</span>
+            <span>Type your response</span>
             <small>Ctrl/⌘ + Enter to send</small>
           </div>
           <Button
@@ -4122,15 +3659,6 @@ export function PitchArena() {
             <AudioLines className="size-3.5 text-[#ffc857]" />
             Room {roomCode}
           </span>
-          {recordingSession && (
-            <button
-              type="button"
-              className="recording-pill"
-              onClick={stopSessionRecording}
-            >
-              <i /> Recording · stop
-            </button>
-          )}
           <Button
             variant="ghost"
             size="icon"
@@ -4211,30 +3739,6 @@ export function PitchArena() {
               >
                 <FileText /> Session transcript
               </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
-                onClick={() =>
-                  cameraStatus === 'live'
-                    ? stopFounderCamera()
-                    : void startFounderCamera('live')
-                }
-              >
-                {cameraStatus === 'live' ? <CameraOff /> : <Camera />}{' '}
-                {cameraStatus === 'live'
-                  ? 'Close founder camera'
-                  : 'Open founder camera'}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
-                onClick={() =>
-                  recordingSession
-                    ? stopSessionRecording()
-                    : void startSessionRecording()
-                }
-              >
-                {recordingSession ? <CircleStop /> : <Video />}{' '}
-                {recordingSession ? 'Stop recording' : 'Record screen + camera'}
-              </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem
                 className="cursor-pointer focus:bg-[#ffc857]/12 focus:text-[#ffc857]"
@@ -4246,40 +3750,6 @@ export function PitchArena() {
           </DropdownMenu>
         </div>
       </header>
-      {cameraStatus === 'live' && cameraMode === 'live' && (
-        <aside
-          className={`founder-video-dock ${presentationReset.status === 'awaiting' ? 'founder-video-reset' : ''}`}
-          aria-label="Live founder video"
-        >
-          <header>
-            <div>
-              <span>Founder cam</span>
-              <strong>{pitch.founderName.trim() || 'Guest founder'}</strong>
-            </div>
-            {recordingSession && <b>REC</b>}
-          </header>
-          <video
-            ref={cameraVideoRef}
-            autoPlay
-            muted
-            playsInline
-            aria-label="Live founder camera preview"
-          />
-          <footer>
-            <button type="button" onClick={() => void captureFounderPhoto()}>
-              <Camera /> Capture judge photo
-            </button>
-            <button
-              type="button"
-              onClick={stopFounderCamera}
-              disabled={recordingSession}
-              aria-label="Turn off founder camera"
-            >
-              <CameraOff />
-            </button>
-          </footer>
-        </aside>
-      )}
       {launchCount !== null && (
         <output className="arena-launch-countdown" aria-live="assertive">
           <span key={launchCount}>{launchCount}</span>
@@ -4461,11 +3931,7 @@ export function PitchArena() {
         )}
 
         {!pitchQueued && (
-          <button
-            className={`stage-microphone ${listening ? 'stage-microphone-live' : ''}`}
-            onClick={toggleListening}
-            aria-label={listening ? 'Stop listening' : 'Pitch by voice'}
-          >
+          <div className="stage-microphone" aria-hidden="true">
             {/* The microphone is a local transparent stage prop; preserving its exact alpha edge is preferable here. */}
             {/* oxlint-disable-next-line next/no-img-element */}
             <img
@@ -4474,8 +3940,7 @@ export function PitchArena() {
               width={1024}
               height={1536}
             />
-            <span>{listening ? 'Listening…' : 'Your mic is live'}</span>
-          </button>
+          </div>
         )}
 
         <div
@@ -4559,10 +4024,7 @@ export function PitchArena() {
             <div className="pitch-console room-pitch-console">
               <div className="pitch-stage-topline">
                 <span>Your pitch stage</span>
-                <div
-                  className={`stage-wave ${listening ? 'stage-wave-live' : ''}`}
-                  aria-hidden="true"
-                >
+                <div className="stage-wave" aria-hidden="true">
                   {Array.from({ length: 34 }).map((_, index) => (
                     <i key={index} />
                   ))}
@@ -4686,6 +4148,40 @@ export function PitchArena() {
                       </div>
                     )}
                   </section>
+                  <fieldset
+                    className="pitch-purpose-selector"
+                    aria-label="Choose pitch purpose"
+                  >
+                    <button
+                      type="button"
+                      data-active={pitch.equity <= 0}
+                      onClick={() =>
+                        setPitch((current) => ({ ...current, equity: 0 }))
+                      }
+                    >
+                      <Trophy />
+                      <span>
+                        <strong>Competition</strong>
+                        <small>Prize + panel verdict · no equity</small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      data-active={pitch.equity > 0}
+                      onClick={() =>
+                        setPitch((current) => ({
+                          ...current,
+                          equity: current.equity > 0 ? current.equity : 10,
+                        }))
+                      }
+                    >
+                      <CircleDollarSign />
+                      <span>
+                        <strong>Investment</strong>
+                        <small>Funding ask + equity terms</small>
+                      </span>
+                    </button>
+                  </fieldset>
                   <div className="game-setup-fields">
                     <label
                       htmlFor="pitch-founder-name"
@@ -4736,7 +4232,9 @@ export function PitchArena() {
                       data-filled={pitch.askAmount > 0}
                     >
                       <span>
-                        <CircleDollarSign /> Ask (USD) <b>Type here</b>
+                        <CircleDollarSign />{' '}
+                        {pitch.equity <= 0 ? 'Prize (USD)' : 'Ask (USD)'}{' '}
+                        <b>Type here</b>
                       </span>
                       <Input
                         id="pitch-ask-amount"
@@ -4754,35 +4252,48 @@ export function PitchArena() {
                         placeholder="250,000…"
                       />
                     </label>
-                    <label
-                      htmlFor="pitch-equity"
-                      className="game-setup-field"
-                      data-filled={pitch.equity > 0}
-                    >
-                      <span>
-                        <PieChart /> Equity (%) <b>Type here</b>
-                      </span>
-                      <Input
-                        id="pitch-equity"
-                        aria-label="Equity percentage"
-                        inputMode="decimal"
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        value={pitch.equity || ''}
-                        onChange={(event) =>
-                          setPitch((current) => ({
-                            ...current,
-                            equity: Math.max(
-                              0,
-                              Math.min(100, Number(event.target.value)),
-                            ),
-                          }))
-                        }
-                        placeholder="10…"
-                      />
-                    </label>
+                    {pitch.equity <= 0 ? (
+                      <div
+                        className="game-setup-field game-setup-mode-lock"
+                        data-filled="true"
+                        aria-label="Competition judging with no equity"
+                      >
+                        <span>
+                          <Trophy /> Judging terms <b>Competition</b>
+                        </span>
+                        <strong>0% equity · pure judgment</strong>
+                      </div>
+                    ) : (
+                      <label
+                        htmlFor="pitch-equity"
+                        className="game-setup-field"
+                        data-filled={pitch.equity > 0}
+                      >
+                        <span>
+                          <PieChart /> Equity (%) <b>Type here</b>
+                        </span>
+                        <Input
+                          id="pitch-equity"
+                          aria-label="Equity percentage"
+                          inputMode="decimal"
+                          type="number"
+                          min={0.1}
+                          max={100}
+                          step={0.1}
+                          value={pitch.equity}
+                          onChange={(event) =>
+                            setPitch((current) => ({
+                              ...current,
+                              equity: Math.max(
+                                0.1,
+                                Math.min(100, Number(event.target.value)),
+                              ),
+                            }))
+                          }
+                          placeholder="10…"
+                        />
+                      </label>
+                    )}
                   </div>
                   <div className="game-options-grid">
                     <div
@@ -4834,7 +4345,11 @@ export function PitchArena() {
                   <label className="opening-pitch-card">
                     <span>
                       Your pitch
-                      <small>Product · customer · traction · why you win</small>
+                      <small>
+                        {pitch.equity <= 0
+                          ? 'Experience · WebMCP · collaboration · why it deserves to win'
+                          : 'Product · customer · traction · why you win'}
+                      </small>
                     </span>
                     <Textarea
                       aria-label="Opening pitch"
@@ -4842,7 +4357,9 @@ export function PitchArena() {
                       maxLength={6000}
                       onChange={(event) => setDraft(event.target.value)}
                       placeholder={
-                        'Explain your product, who it’s for, your traction, and why you’re the team to win…\nMake your case clear, concise, and compelling.'
+                        pitch.equity <= 0
+                          ? 'Explain the experience, how WebMCP changes the interaction, what the human and AI accomplish together, and why it deserves to win…\nMake your case clear, concise, and compelling.'
+                          : 'Explain your product, who it’s for, your traction, and why you’re the team to win…\nMake your case clear, concise, and compelling.'
                       }
                       className="opening-pitch-input resize-none"
                     />
@@ -4897,16 +4414,20 @@ export function PitchArena() {
                     <h2>
                       {pitch.endReason === 'timeout'
                         ? 'OUT OF TIME'
-                        : pitch.amountRaised
-                          ? 'You got a deal.'
-                          : 'No deal.'}
+                        : pitch.equity <= 0
+                          ? 'Judgment delivered.'
+                          : pitch.amountRaised
+                            ? 'You got a deal.'
+                            : 'No deal.'}
                     </h2>
                     <blockquote>{pitch.summary}</blockquote>
                     <div>
                       <b>
-                        {acceptedBid
-                          ? `Deal with ${acceptedJudge?.name ?? acceptedBid.judgeId}: ${money(acceptedBid.amount)} for ${acceptedBid.equity}%`
-                          : `Raised ${money(pitch.amountRaised ?? 0)}`}
+                        {pitch.equity <= 0
+                          ? `Prize target ${money(pitch.askAmount)} · Judged on merit`
+                          : acceptedBid
+                            ? `Deal with ${acceptedJudge?.name ?? acceptedBid.judgeId}: ${money(acceptedBid.amount)} for ${acceptedBid.equity}%`
+                            : `Raised ${money(pitch.amountRaised ?? 0)}`}
                       </b>
                       <span>
                         Active {formatClock(pitch.durationSeconds ?? 0)}
@@ -5277,36 +4798,23 @@ export function PitchArena() {
               </label>
               <section
                 className="founder-camera-slot"
-                aria-label="Founder camera"
+                aria-label="Optional founder photo"
               >
-                {pitch.status === 'lobby' &&
-                  !founderPhoto &&
-                  cameraStatus === 'off' && (
-                    <button
-                      type="button"
-                      className="founder-photo-nudge"
-                      onClick={() => void startFounderCamera('photo')}
-                      aria-label="Add your photo so the judges can see you"
-                    >
-                      <ArrowLeft aria-hidden="true" />
-                      <span>Add your photo so the judges can see you</span>
-                    </button>
-                  )}
+                {pitch.status === 'lobby' && !founderPhoto && (
+                  <label
+                    className="founder-photo-nudge"
+                    htmlFor="founder-photo-upload"
+                  >
+                    <ArrowLeft aria-hidden="true" />
+                    <span>Add your photo so the judges can see you</span>
+                  </label>
+                )}
                 <header>
                   <span>Founder</span>
                   <strong>{pitch.founderName.trim() || 'Guest founder'}</strong>
-                  {recordingSession && <b>REC</b>}
                 </header>
                 <div className="founder-camera-frame">
-                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
-                    <video
-                      ref={cameraVideoRef}
-                      autoPlay
-                      muted
-                      playsInline
-                      aria-label="Founder photo preview"
-                    />
-                  ) : founderPhoto ? (
+                  {founderPhoto ? (
                     <NextImage
                       src={founderPhoto.url}
                       alt={`${pitch.founderName.trim() || 'Founder'} readiness capture`}
@@ -5315,61 +4823,21 @@ export function PitchArena() {
                     />
                   ) : (
                     <div className="founder-camera-empty">
-                      {cameraStatus === 'requesting' ? (
-                        <LoaderCircle />
-                      ) : (
-                        <UserRound />
-                      )}
-                      <span>
-                        {cameraStatus === 'requesting'
-                          ? 'Opening…'
-                          : cameraStatus === 'live'
-                            ? 'Capture from the live camera'
-                            : 'Add your photo'}
-                      </span>
+                      <UserRound />
+                      <span>Optional photo</span>
                     </div>
                   )}
-                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
-                    <i>Live preview</i>
-                  ) : founderPhoto ? (
-                    <i>MCP evidence</i>
-                  ) : null}
+                  {founderPhoto ? <i>MCP evidence</i> : null}
                 </div>
                 <div className="founder-camera-actions">
-                  {cameraStatus === 'live' && cameraMode === 'photo' ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => void captureFounderPhoto()}
-                      >
-                        <Camera /> Capture judge photo
-                      </button>
-                      <button
-                        className="icon-only"
-                        type="button"
-                        onClick={stopFounderCamera}
-                        aria-label="Close photo preview"
-                      >
-                        <CameraOff />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void startFounderCamera('photo')}
-                      disabled={cameraStatus === 'requesting'}
-                    >
-                      <Camera />
-                      {founderPhoto ? 'Retake photo' : 'Take your photo'}
-                    </button>
-                  )}
-                  <label>
-                    <ImageIcon /> Upload instead
+                  <label htmlFor="founder-photo-upload">
+                    <ImageIcon />
+                    {founderPhoto ? 'Replace photo' : 'Upload photo'}
                     <input
+                      id="founder-photo-upload"
                       className="sr-only"
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      capture="user"
                       onChange={(event) => {
                         void uploadFounderPhoto(event.currentTarget.files);
                         event.currentTarget.value = '';
@@ -5391,42 +4859,9 @@ export function PitchArena() {
                     <small>Off by default. Judges can still review it.</small>
                   </span>
                 </label>
-                <div className="founder-video-actions">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      cameraStatus === 'live' && cameraMode === 'live'
-                        ? stopFounderCamera()
-                        : void startFounderCamera('live')
-                    }
-                    disabled={cameraStatus === 'requesting' || recordingSession}
-                  >
-                    {cameraStatus === 'live' && cameraMode === 'live' ? (
-                      <CameraOff />
-                    ) : (
-                      <Video />
-                    )}
-                    {cameraStatus === 'live' && cameraMode === 'live'
-                      ? 'Stop live video'
-                      : 'Start live video'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      recordingSession
-                        ? stopSessionRecording()
-                        : void startSessionRecording()
-                    }
-                  >
-                    {recordingSession ? <CircleStop /> : <Video />}
-                    {recordingSession
-                      ? 'Stop & download recording'
-                      : 'Record arena + founder cam'}
-                  </button>
-                </div>
                 <small>
                   {cameraMessage ||
-                    'Photo evidence and lower-left live video are separate. Recording downloads locally.'}
+                    'Optional photo evidence lets judges comment on visible presentation choices.'}
                 </small>
               </section>
             </div>

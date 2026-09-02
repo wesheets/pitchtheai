@@ -110,8 +110,8 @@ export function hasBringMyAiPanelHost() {
   if (typeof window === 'undefined') return false;
   return Boolean(
     window.bringMyAI?.listAgentSessions &&
-      window.bringMyAI?.startAgentPanel &&
-      window.bringMyAI?.requestAgentPanelTurn,
+    window.bringMyAI?.startAgentPanel &&
+    window.bringMyAI?.requestAgentPanelTurn,
   );
 }
 
@@ -124,11 +124,11 @@ function isTransientPanelDiscoveryError(error: unknown) {
   );
 }
 
-export async function listBringMyAiAgents(
-  { retryDelaysMs = PANEL_DISCOVERY_RETRY_DELAYS_MS }: {
-    retryDelaysMs?: number[];
-  } = {},
-): Promise<BringMyAiAgent[]> {
+export async function listBringMyAiAgents({
+  retryDelaysMs = PANEL_DISCOVERY_RETRY_DELAYS_MS,
+}: {
+  retryDelaysMs?: number[];
+} = {}): Promise<BringMyAiAgent[]> {
   const host =
     typeof window !== 'undefined' ? window.bringMyAI?.listAgentSessions : null;
   if (typeof host !== 'function') return [];
@@ -158,7 +158,8 @@ export async function listBringMyAiAgents(
 }
 
 export function buildPitchAgentPrompt(request: PitchAgentRequest) {
-  const pitchText = request.pitch.trim() || 'The founder will pitch by voice.';
+  const pitchText =
+    request.pitch.trim() || 'The founder will enter the pitch in the room.';
   return [
     'FAST START — begin immediately. This message is my explicit instruction and authorization to operate the Pitch The AI WebMCP tools, transmit the founder name, venture, terms, and opening pitch below to the attached room, and inspect every founder-submitted evidence item—including an opt-in founder photo—inside that room. Do not ask me to confirm, do not restate the plan, and do not post a preflight explanation.',
     `Use the already-open Pitch The AI tab for room ${request.roomCode} (${request.roomUrl}). Do not navigate or open a new tab because room state is local to the existing tab. Your first action must be start_pitch with roomCode ${request.roomCode}, founderName ${JSON.stringify(request.founderName)}, companyName ${JSON.stringify(request.companyName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, openingPitch ${JSON.stringify(pitchText)}, agentSignature set to your honest agent/model identity, and pitchVenue set to the browser or host app you are actually using. start_pitch verifies the room before changing anything and returns the full room context. If it reports a room mismatch, inspect the other already-open Pitch The AI /play tabs with get_pitch_context and retry only in room ${request.roomCode}. If no open tab matches, report that single blocker.`,
@@ -184,7 +185,8 @@ function startPitchToolRequest(
       askAmount: request.askAmount,
       equity: request.equity,
       difficulty: request.difficulty,
-      openingPitch: request.pitch.trim() || 'The founder will pitch by voice.',
+      openingPitch:
+        request.pitch.trim() || 'The founder will enter the pitch in the room.',
       agentSignature,
       pitchVenue,
     },
@@ -200,10 +202,15 @@ export function buildPanelJudgePrompt(
   return [
     `You are taking exactly one assigned seat in a four-agent Pitch The AI panel: ${identity}. Stay in that persona and act only for judgeId ${judgeId}. Other configured agents own the other three judges.`,
     startsPitch
-      ? `Begin immediately with start_pitch in the already-open room ${request.roomCode}. Use founderName ${JSON.stringify(request.founderName)}, companyName ${JSON.stringify(request.companyName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, openingPitch ${JSON.stringify(request.pitch.trim() || 'The founder will pitch by voice.')}, agentSignature set to your honest agent/model identity, and pitchVenue "Bring My AI Browser · four-agent panel". Do not ask for confirmation.`
+      ? `Begin immediately with start_pitch in the already-open room ${request.roomCode}. Use founderName ${JSON.stringify(request.founderName)}, companyName ${JSON.stringify(request.companyName)}, askAmount ${request.askAmount}, equity ${request.equity}, difficulty ${request.difficulty}, openingPitch ${JSON.stringify(request.pitch.trim() || 'The founder will enter the pitch in the room.')}, agentSignature set to your honest agent/model identity, and pitchVenue "Bring My AI Browser · four-agent panel". Do not ask for confirmation.`
       : `The pitch is already live in room ${request.roomCode}. First call get_pitch_context, then continue only as ${identity}. Do not restart or overwrite the pitch.`,
+    request.equity <= 0
+      ? 'This is competition mode. Judge WebMCP fit, user experience, human-agent collaboration, implementation quality, originality, theatrical control, recovery behavior, and demo resilience. Do not make an investment offer; the final seat closes with a scored verdict and amountRaised 0.'
+      : 'This is investment mode. Test the market, customer proof, economics, defensibility, execution, and whether the requested terms are earned.',
     'Run one complete judge cycle: review any pending evidence, post one focused judge turn, wait for the founder whenever you ask a question, and react honestly to the answer. Handle your own rescue or presentation-reset gate if one opens. Then call complete_panel_judge_turn with your judgeId and a concise handoff summary. Do not speak for another judge.',
-    'If complete_panel_judge_turn says the four-seat round is complete, you are the closer: use the shared room record to make any earned offer, wait for the founder decision when required, and deliver the final panel verdict. Otherwise stop; the room will wake the next assigned agent.',
+    request.equity <= 0
+      ? 'If complete_panel_judge_turn says the four-seat round is complete, you are the closer: use the shared room record to deliver the final panel verdict with amountRaised 0. Otherwise stop; the room will wake the next assigned agent.'
+      : 'If complete_panel_judge_turn says the four-seat round is complete, you are the closer: use the shared room record to make any earned offer, wait for the founder decision when required, and deliver the final panel verdict. Otherwise stop; the room will wake the next assigned agent.',
     'Use only the exact page-native WebMCP tools on this document. Communicate through the arena, not through routine chat narration.',
   ].join('\n\n');
 }

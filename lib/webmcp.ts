@@ -692,7 +692,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'wait_for_founder_response',
       description:
-        'Wait up to 12 seconds while the human reads the active judge, clicks Respond, and answers by voice or text. The difficulty-based response clock starts only on Respond, not when the judge speaks. A submitted answer persists across calls, and a five-second transport grace reconciles answers already in flight. If the result is waiting, call this again immediately without analysis or another judge turn. If answered, evaluate the exact response; if timed_out, burn patience.',
+        'Wait up to 12 seconds while the human reads the active judge, clicks Respond, and types an answer. The difficulty-based response clock starts only on Respond, not when the judge speaks. A submitted answer persists across calls, and a five-second transport grace reconciles answers already in flight. If the result is waiting, call this again immediately without analysis or another judge turn. If answered, evaluate the exact response; if timed_out, burn patience.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -713,7 +713,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'wait_for_founder_readiness_photo',
       description:
-        'Wait up to 12 seconds while the room clock is paused and the founder follows a judge presentation-reset request, opens the camera, and submits a new readiness photo. If waiting, call this tool again immediately. When captured, open and inspect the returned exact material URL, then call review_pitch_evidence. The same judge must react to the retake before anyone else speaks.',
+        'Wait up to 12 seconds while the room clock is paused and the founder follows a judge presentation-reset request and uploads a new readiness photo. If waiting, call this tool again immediately. When submitted, open and inspect the returned exact material URL, then call review_pitch_evidence. The same judge must react to the new photo before anyone else speaks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -745,7 +745,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'complete_panel_judge_turn',
       description:
-        'Compatible four-agent panel hosts only: release your assigned judge seat after you have completed exactly one judge cycle and every founder-answer, rescue, or presentation-reset gate you opened is closed. The room will securely wake the configured agent assigned to the next judge. Never use this during a normal single-agent Codex or ChatGPT pitch. If the result says panel_complete, the current final-seat agent must close the room with any earned offer and post_panel_verdict.',
+        'Compatible four-agent panel hosts only: release your assigned judge seat after you have completed exactly one judge cycle and every founder-answer, rescue, or presentation-reset gate you opened is closed. The room will securely wake the configured agent assigned to the next judge. Never use this during a normal single-agent Codex or ChatGPT pitch. If the result says panel_complete, the current final-seat agent closes the room with post_panel_verdict; competition mode uses amountRaised 0 and no offer.',
       inputSchema: {
         type: 'object',
         required: ['judgeId', 'handoffSummary'],
@@ -811,7 +811,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'post_bid_round',
       description:
-        'Put one or more visible offers on the founder’s deal table. Two or more offers create a competitive bidding round; one offer may answer a founder counter. The founder—not the agent—must then choose a judge, counter one offer, or reject them all. Immediately call wait_for_founder_offer_decision in consecutive short slices and do not continue until it returns answered or timed_out. Judges may steal, improve, or form a joint offer, but every offer must be earned by the live pitch.',
+        'Investment mode only: put one or more visible offers on the founder’s deal table. Competition mode is judgment-only and rejects this tool. Two or more offers create a competitive bidding round; one offer may answer a founder counter. The founder—not the agent—must then choose a judge, counter one offer, or reject them all. Immediately call wait_for_founder_offer_decision in consecutive short slices and do not continue until it returns answered or timed_out. Judges may steal, improve, or form a joint offer, but every offer must be earned by the live pitch.',
       inputSchema: {
         type: 'object',
         required: ['bids'],
@@ -842,6 +842,11 @@ export function registerPitchTools(options: PitchToolOptions) {
         requireOfferDecisionComplete();
         requireNoAcceptedDeal();
         requirePresentationResetComplete();
+        if (optionsRef.current.getSnapshot().pitch.equity <= 0) {
+          throw new Error(
+            'Competition mode is judgment-only and does not accept investment offers. Close with post_panel_verdict and amountRaised 0.',
+          );
+        }
         const bids = args.bids as Bid[];
         if (new Set(bids.map((bid) => bid.judgeId)).size !== bids.length) {
           throw new Error(
@@ -880,7 +885,7 @@ export function registerPitchTools(options: PitchToolOptions) {
     {
       name: 'post_panel_verdict',
       description:
-        "End the visible pitch with a 0–100 score, capital raised, and a concise roast-style arena verdict. The verdict is displayed large, so write like a ruthless game-show judge, not a professional investment memo. Call out the founder's actual evasions and unanswered questions in plain language. Repeated evasion or silence with no credible answers belongs below 15; if every judge is out and the founder never answered the core questions, score 0–8. The app enforces these caps from the turn ratings. Use amountRaised 0 when no offer is accepted or all judges are out.",
+        "End the visible pitch with a 0–100 score, amount raised, and a concise roast-style arena verdict. The verdict is displayed large, so write like a ruthless game-show judge, not a professional investment memo. Call out the founder's actual evasions and unanswered questions in plain language. Repeated evasion or silence with no credible answers belongs below 15; if every judge is out and the founder never answered the core questions, score 0–8. The app enforces these caps from the turn ratings. Competition mode is judgment-only and always uses amountRaised 0; investment mode uses 0 when no offer is accepted or all judges are out.",
       inputSchema: {
         type: 'object',
         required: ['score', 'summary', 'amountRaised'],
