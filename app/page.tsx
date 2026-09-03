@@ -55,7 +55,7 @@ function JudgePreview({ judge }: { judge: (typeof judges)[number] }) {
       />
       <div className="landing-judge-copy">
         <span>
-          <b>AI investor</b> · {judge.role}
+          <b>AI judge</b> · {judge.role}
         </span>
         <h3>{judge.name}</h3>
         <p>{judge.copy}</p>
@@ -86,7 +86,7 @@ export default function Home() {
 
         <nav aria-label="Main navigation">
           <LandingHowItWorks />
-          <a href="#judges">Judges</a>
+          <a href="#modes">Game modes</a>
           <a href="/leaderboard">Leaderboard</a>
           <LandingSound />
           <div className="external-beta">
@@ -130,9 +130,19 @@ export default function Home() {
             <span>Before patience runs out.</span>
           </h1>
           <p className="landing-subtitle">
-            Pitch your idea to four AI investors. Answer tough questions. Defend
-            your vision. Win the deal—or get roasted.
+            Pitch your idea to four distinct AI judges. Answer hard questions,
+            defend your choices, and earn a deal or a competition score.
           </p>
+          <div className="landing-modes" id="modes" aria-label="Game modes">
+            <div>
+              <strong>Investment</strong>
+              <span>Pitch for a deal and negotiate the terms.</span>
+            </div>
+            <div>
+              <strong>Competition</strong>
+              <span>Pitch for a score or prize with 0% equity.</span>
+            </div>
+          </div>
           <div className="landing-actions">
             <a className="landing-primary-cta" href="/play">
               Play now <Zap />
@@ -142,22 +152,15 @@ export default function Home() {
             </a>
           </div>
           <button className="landing-copitch-cta" type="button" disabled>
-            Co-Pitch <span>Coming Soon</span>
+            <span>
+              Co-Pitch <b>Coming Soon</b>
+            </span>
+            <small>Pitch alongside a human teammate.</small>
           </button>
-          <p className="landing-orientation">
-            Built for the{' '}
-            <a
-              href="https://openai.com/webmcp-challenge/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              WebMCP Challenge
-            </a>
-            . Play in ChatGPT/Codex or through the{' '}
-            <a href="https://bringmy.ai" target="_blank" rel="noreferrer">
-              BringMy.ai beta browser
-            </a>
-            .
+          <p className="landing-start-note">
+            <strong>One prompt starts the room.</strong> Add your pitch, copy its
+            room prompt into Codex, ChatGPT, or BringMy.ai, and your AI runs all
+            four judges while you answer.
           </p>
           <div className="landing-proof">
             <div className="landing-proof-faces" aria-hidden="true">
@@ -174,7 +177,7 @@ export default function Home() {
               ))}
             </div>
             <p>
-              Built for founders, builders, and dreamers who want the truth.
+              Four distinct judges. One shared room history. Your answers.
             </p>
           </div>
           <div className="landing-microphone" aria-hidden="true" />
@@ -185,6 +188,36 @@ export default function Home() {
           <JudgePreview judge={judges[3]} />
         </div>
       </section>
+
+      <footer className="landing-footer">
+        <div>
+          <strong>PITCH THE AI</strong>
+          <span>Four minds. One deal—or one final score.</span>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a
+            href="https://github.com/wesheets/pitchtheai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            MIT source <ArrowUpRight />
+          </a>
+          <a
+            href="https://github.com/wesheets/pitchtheai#data-and-privacy-boundary"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Privacy &amp; data
+          </a>
+          <a
+            href="https://openai.com/webmcp-challenge/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            WebMCP Challenge <ArrowUpRight />
+          </a>
+        </nav>
+      </footer>
 
     </main>
   );

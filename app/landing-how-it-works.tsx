@@ -68,13 +68,14 @@ export function LandingHowItWorks() {
           <X />
         </button>
         <header>
-          <span className="landing-how-eyebrow">The WebMCP game loop</span>
+          <span className="landing-how-eyebrow">How the game works</span>
           <h2 id="landing-how-title">
             One live room. Four judges. Real page tools.
           </h2>
           <p id="landing-how-description">
-            Your attached AI operates the arena through 14 page-native WebMCP
-            tools. The founder still controls every answer and deal decision.
+            Add your pitch, copy one room prompt into the AI you already use,
+            and face four judges that remember what happened before. You still
+            control every answer and deal decision.
           </p>
         </header>
 
@@ -105,18 +106,25 @@ export function LandingHowItWorks() {
           </li>
         </ol>
 
-        <div className="landing-how-tools" aria-label="WebMCP tools">
-          {toolGroups.map((group) => (
-            <section key={group.title}>
-              <h3>{group.title}</h3>
-              <div>
-                {group.tools.map((tool) => (
-                  <code key={tool}>{tool}</code>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <details className="landing-how-technical">
+          <summary>View the 14 WebMCP tools</summary>
+          <p>
+            These page-native tools let the AI operate the visible arena while
+            the founder remains in control.
+          </p>
+          <div className="landing-how-tools" aria-label="WebMCP tools">
+            {toolGroups.map((group) => (
+              <section key={group.title}>
+                <h3>{group.title}</h3>
+                <div>
+                  {group.tools.map((tool) => (
+                    <code key={tool}>{tool}</code>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </details>
 
         <div className="landing-how-footer">
           <p>
