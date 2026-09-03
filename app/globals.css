@@ -5949,6 +5949,30 @@ textarea {
   color: #fff;
   background: rgb(5 7 10 / 0.7);
 }
+.landing-copitch-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-width: 232px;
+  margin: 0.72rem auto 0;
+  padding: 0.72rem 1.2rem;
+  border: 1px solid rgb(255 200 87 / 0.28);
+  border-radius: 10px;
+  color: rgb(255 255 255 / 0.68);
+  background: rgb(5 7 10 / 0.62);
+  font: inherit;
+  font-weight: 720;
+  cursor: not-allowed;
+}
+.landing-copitch-cta span {
+  color: #ffc13d;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .landing-orientation {
   max-width: 640px;
   margin: 1rem auto 0;
@@ -6002,8 +6026,11 @@ textarea {
     drop-shadow(0 0 20px rgb(255 190 65 / 0.18));
 }
 .landing-how-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(820px, calc(100% - 2rem));
   max-height: min(88svh, 820px);
-  max-width: min(820px, calc(100% - 2rem));
+  margin: auto;
   gap: 1.25rem;
   overflow-y: auto;
   border: 1px solid rgb(255 200 87 / 0.42);
@@ -6017,21 +6044,44 @@ textarea {
     0 32px 100px rgb(0 0 0 / 0.82),
     0 0 55px rgb(255 190 55 / 0.08);
 }
-.landing-how-dialog + [data-slot='dialog-overlay'],
-[data-slot='dialog-overlay']:has(+ .landing-how-dialog) {
+.landing-how-dialog[open] {
+  display: grid;
+}
+.landing-how-dialog::backdrop {
   background: rgb(0 0 0 / 0.72);
   backdrop-filter: blur(7px);
 }
-.landing-how-dialog [data-slot='dialog-close'] {
+.landing-how-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 9px;
   color: rgb(255 255 255 / 0.68);
+  background: rgb(255 255 255 / 0.035);
+  cursor: pointer;
 }
-.landing-how-dialog [data-slot='dialog-title'] {
+.landing-how-close:hover {
+  color: #fff;
+  border-color: rgb(255 200 87 / 0.3);
+}
+.landing-how-close svg {
+  width: 1rem;
+}
+.landing-how-dialog h2 {
+  max-width: calc(100% - 2.5rem);
+  margin: 0.45rem 0 0;
   font-size: clamp(1.8rem, 4vw, 3rem);
   line-height: 1;
   letter-spacing: -0.05em;
 }
-.landing-how-dialog [data-slot='dialog-description'] {
+.landing-how-dialog header > p {
   max-width: 680px;
+  margin: 0.75rem 0 0;
   color: rgb(255 255 255 / 0.62);
   font-size: 1rem;
   line-height: 1.55;

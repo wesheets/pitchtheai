@@ -1,16 +1,8 @@
 'use client';
 
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, X } from 'lucide-react';
 import Link from 'next/link';
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { useRef } from 'react';
 
 const toolGroups = [
   {
@@ -50,18 +42,41 @@ const toolGroups = [
 ] as const;
 
 export function LandingHowItWorks() {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   return (
-    <Dialog>
-      <DialogTrigger className="landing-how-trigger">How it works</DialogTrigger>
-      <DialogContent className="landing-how-dialog">
-        <DialogHeader>
+    <>
+      <button
+        className="landing-how-trigger"
+        type="button"
+        onClick={() => dialogRef.current?.showModal()}
+      >
+        How it works
+      </button>
+      <dialog
+        ref={dialogRef}
+        className="landing-how-dialog"
+        aria-labelledby="landing-how-title"
+        aria-describedby="landing-how-description"
+      >
+        <button
+          className="landing-how-close"
+          type="button"
+          aria-label="Close how it works"
+          onClick={() => dialogRef.current?.close()}
+        >
+          <X />
+        </button>
+        <header>
           <span className="landing-how-eyebrow">The WebMCP game loop</span>
-          <DialogTitle>One live room. Four judges. Real page tools.</DialogTitle>
-          <DialogDescription>
+          <h2 id="landing-how-title">
+            One live room. Four judges. Real page tools.
+          </h2>
+          <p id="landing-how-description">
             Your attached AI operates the arena through 14 page-native WebMCP
             tools. The founder still controls every answer and deal decision.
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </header>
 
         <ol className="landing-how-steps">
           <li>
@@ -112,7 +127,7 @@ export function LandingHowItWorks() {
             Enter the arena <ArrowRight />
           </Link>
         </div>
-      </DialogContent>
-    </Dialog>
+      </dialog>
+    </>
   );
 }

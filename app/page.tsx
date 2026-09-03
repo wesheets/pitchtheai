@@ -141,6 +141,9 @@ export default function Home() {
               Leaderboard <Trophy />
             </a>
           </div>
+          <button className="landing-copitch-cta" type="button" disabled>
+            Co-Pitch <span>Coming Soon</span>
+          </button>
           <p className="landing-orientation">
             Built for the{' '}
             <a
