@@ -1,17 +1,7 @@
 /* oxlint-disable next/no-html-link-for-pages -- Vinext client routing is bypassed intentionally for reliable hard navigation. */
 import type { CSSProperties } from 'react';
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Gauge,
-  CodeXml,
-  Globe2,
-  ShieldQuestion,
-  Sparkles,
-  Trophy,
-  Users,
-  Zap,
-} from 'lucide-react';
+import { ArrowUpRight, Sparkles, Trophy, Zap } from 'lucide-react';
+import { LandingHowItWorks } from './landing-how-it-works';
 import { LandingSound } from './landing-sound';
 
 const judges = [
@@ -95,10 +85,9 @@ export default function Home() {
         </a>
 
         <nav aria-label="Main navigation">
-          <a href="#how-it-works">How it works</a>
+          <LandingHowItWorks />
           <a href="#judges">Judges</a>
           <a href="/leaderboard">Leaderboard</a>
-          <a href="#faq">FAQ</a>
           <LandingSound />
           <div className="external-beta">
             <a
@@ -194,158 +183,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="landing-stage-preview" id="how-it-works">
-        <div className="landing-stage-ribbon">
-          <a
-            className="landing-challenge-link"
-            href="https://openai.com/webmcp-challenge/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Globe2 /> Built for the WebMCP Challenge <ArrowUpRight />
-          </a>
-          <p>
-            Your browser AI runs the panel. You control every answer and every
-            deal.
-          </p>
-          <a
-            href="https://github.com/wesheets/pitchtheai"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <CodeXml /> MIT source <ArrowUpRight />
-          </a>
-        </div>
-        <div className="landing-stage-board">
-          <div className="landing-stage-stats">
-            <span>
-              Favorability{' '}
-              <strong>
-                50<small>/100</small>
-              </strong>
-            </span>
-            <span>
-              Still in{' '}
-              <strong>
-                4<small>/4</small>
-              </strong>
-            </span>
-            <span>
-              Round <strong>Seed</strong>
-            </span>
-            <span>
-              Best offer <strong>—</strong>
-            </span>
-            <span>
-              Room read <strong>😳 Skeptical</strong>
-            </span>
-          </div>
-          <div className="landing-stage-content">
-            <div>
-              <p>Your pitch stage</p>
-              <h2>Set the terms. Make your case.</h2>
-              <div className="landing-preview-note">
-                <strong>Connect your AI first.</strong>
-                <span>
-                  Then enter the arena to add your founder, venture, terms, and
-                  opening pitch.
-                </span>
-              </div>
-              <div className="landing-difficulty-row">
-                <span>Difficulty</span>
-                <i>Easy</i>
-                <i className="active">Medium</i>
-                <i>Hard</i>
-                <i>Legendary</i>
-                <b>Second Chance · 1 token</b>
-              </div>
-            </div>
-            <aside>
-              <span>Room tools</span>
-              <small>Reset room</small>
-              <small>How it works</small>
-              <div className="landing-fake-slider">
-                <i />
-              </div>
-            </aside>
-          </div>
-        </div>
-        <div className="landing-game-loop" aria-label="How the game works">
-          <span>
-            <b>01</b>
-            <strong>Set your pitch</strong>
-          </span>
-          <span>
-            <b>02</b>
-            <strong>Face the judges</strong>
-          </span>
-          <span>
-            <b>03</b>
-            <strong>Climb the leaderboard</strong>
-          </span>
-        </div>
-        <div className="landing-feature-row">
-          <article>
-            <ShieldQuestion />
-            <span>
-              <strong>Face the judges</strong>Questions adapt to every answer.
-            </span>
-          </article>
-          <article>
-            <Gauge />
-            <span>
-              <strong>Feel the pressure</strong>Timers, music, and patience are
-              live.
-            </span>
-          </article>
-          <article>
-            <Trophy />
-            <span>
-              <strong>Earn your rank</strong>Close a deal and climb the board.
-            </span>
-          </article>
-          <article>
-            <Users />
-            <span>
-              <strong>Practice at any level</strong>Easy coaching to Legendary
-              heat.
-            </span>
-          </article>
-        </div>
-      </section>
-
-      <section className="landing-faq" id="faq">
-        <div>
-          <p className="landing-eyebrow">Before you enter the room</p>
-          <h2>One pitch. Four memories. No script.</h2>
-        </div>
-        <div className="landing-faq-grid">
-          <article>
-            <h3>What do I need?</h3>
-            <p>
-              A WebMCP-capable browser agent attached to the play page. Evidence
-              and founder-photo uploads are optional.
-            </p>
-          </article>
-          <article>
-            <h3>Is the game open source?</h3>
-            <p>
-              Yes. Pitch The AI’s application source is public under the MIT
-              License. External beta links are clearly labeled and separate.
-            </p>
-          </article>
-          <article>
-            <h3>Can the AI invent my answer?</h3>
-            <p>
-              No. Response gates hold the panel until you answer or time out,
-              and only you can accept, counter, or reject an offer.
-            </p>
-          </article>
-        </div>
-        <a className="landing-bottom-cta" href="/play">
-          Enter the arena <ArrowRight />
-        </a>
-      </section>
     </main>
   );
 }
